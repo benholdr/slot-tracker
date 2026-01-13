@@ -16,11 +16,13 @@
     
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js date adapter -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; }
-        .chart-container { position: relative; height: 300px; width: 100%; }
+        .chart-container { position: relative; height: 350px; width: 100%; }
     </style>
 </head>
 <body>
@@ -37,7 +39,8 @@
                 LayoutDashboard: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>,
                 Trash2: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>,
                 MapPin: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>,
-                BarChart3: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+                BarChart3: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>,
+                Filter: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
             };
             return icons[name] || null;
         };
@@ -46,6 +49,7 @@
             const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
             const DENOMS = ['.01', '.02', '.05', '.1', '.25', '.5', '1.00'];
             const MULTIPLIERS = ['1', '2', '3', '4', '5'];
+            const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4'];
 
             const [machines, setMachines] = useState(() => {
                 const saved = localStorage.getItem('slot_tracker_machines');
@@ -58,6 +62,8 @@
             });
 
             const [activeTab, setActiveTab] = useState('dashboard');
+            const [filterDate, setFilterDate] = useState('');
+            
             const [machineForm, setMachineForm] = useState({ name: '', location: '' });
             const [recordForm, setRecordForm] = useState({ 
                 machineId: '', 
@@ -77,42 +83,53 @@
                 localStorage.setItem('slot_tracker_records', JSON.stringify(records));
             }, [machines, records]);
 
+            // Filtered records for stats and chart
+            const filteredRecords = useMemo(() => {
+                if (!filterDate) return records;
+                return records.filter(r => r.displayDateISO === filterDate);
+            }, [records, filterDate]);
+
             // Chart Rendering Logic
             useEffect(() => {
                 if (activeTab === 'dashboard' && chartRef.current) {
                     const ctx = chartRef.current.getContext('2d');
                     
-                    // Aggregate jackpots per day
-                    const dayTotals = DAYS.map(day => {
-                        return records
-                            .filter(r => r.day === day)
-                            .reduce((sum, r) => sum + r.jackpot, 0);
-                    });
+                    // Group data by machine for line series
+                    const datasets = machines.map((m, index) => {
+                        const machineData = filteredRecords
+                            .filter(r => r.machineId === m.id)
+                            .map(r => ({ x: r.timestamp, y: r.jackpot }))
+                            .sort((a, b) => a.x - b.x);
+
+                        return {
+                            label: m.name,
+                            data: machineData,
+                            borderColor: COLORS[index % COLORS.length],
+                            backgroundColor: COLORS[index % COLORS.length],
+                            tension: 0.3,
+                            pointRadius: 5,
+                            pointHoverRadius: 8
+                        };
+                    }).filter(ds => ds.data.length > 0);
 
                     if (chartInstance.current) {
                         chartInstance.current.destroy();
                     }
 
                     chartInstance.current = new Chart(ctx, {
-                        type: 'bar',
-                        data: {
-                            labels: DAYS,
-                            datasets: [{
-                                label: 'Total Jackpots ($)',
-                                data: dayTotals,
-                                backgroundColor: 'rgba(79, 70, 229, 0.8)',
-                                borderRadius: 8,
-                                borderSkipped: false,
-                            }]
-                        },
+                        type: 'line',
+                        data: { datasets },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
                             plugins: {
-                                legend: { display: false },
+                                legend: { 
+                                    position: 'bottom',
+                                    labels: { font: { weight: 'bold', size: 11 } }
+                                },
                                 tooltip: {
                                     callbacks: {
-                                        label: (context) => `$${context.parsed.y.toFixed(2)}`
+                                        label: (context) => `${context.dataset.label}: $${context.parsed.y.toFixed(2)}`
                                     }
                                 }
                             },
@@ -123,6 +140,14 @@
                                     ticks: { font: { weight: 'bold' }, callback: (value) => '$' + value }
                                 },
                                 x: {
+                                    type: 'time',
+                                    time: {
+                                        unit: filterDate ? 'hour' : 'day',
+                                        displayFormats: {
+                                            hour: 'HH:mm',
+                                            day: 'MMM d'
+                                        }
+                                    },
                                     grid: { display: false },
                                     ticks: { font: { weight: 'bold' } }
                                 }
@@ -133,7 +158,7 @@
                 return () => {
                     if (chartInstance.current) chartInstance.current.destroy();
                 };
-            }, [activeTab, records]);
+            }, [activeTab, filteredRecords, filterDate, machines]);
 
             const addMachine = (e) => {
                 e.preventDefault();
@@ -165,7 +190,8 @@
                     jackpot: parseFloat(recordForm.jackpot) || 0,
                     timestamp: payoutDate.getTime(),
                     displayTime: payoutDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    displayDate: payoutDate.toLocaleDateString()
+                    displayDate: payoutDate.toLocaleDateString(),
+                    displayDateISO: payoutDate.toISOString().split('T')[0] // For filtering
                 };
                 setRecords([newRecord, ...records]);
                 setRecordForm({ ...recordForm, totalBet: '', jackpot: '' });
@@ -184,11 +210,11 @@
             };
 
             const stats = useMemo(() => {
-                const totalPlayed = records.reduce((acc, r) => acc + r.totalBet, 0);
-                const totalJackpots = records.reduce((acc, r) => acc + r.jackpot, 0);
-                const avgJackpot = records.length > 0 ? (totalJackpots / records.length) : 0;
-                return { totalPlayed, totalJackpots, avgJackpot, totalEntries: records.length };
-            }, [records]);
+                const totalPlayed = filteredRecords.reduce((acc, r) => acc + r.totalBet, 0);
+                const totalJackpots = filteredRecords.reduce((acc, r) => acc + r.jackpot, 0);
+                const avgJackpot = filteredRecords.length > 0 ? (totalJackpots / filteredRecords.length) : 0;
+                return { totalPlayed, totalJackpots, avgJackpot, totalEntries: filteredRecords.length };
+            }, [filteredRecords]);
 
             return (
                 <div className="min-h-screen bg-[#F1F5F9] text-slate-900 pb-24 font-sans">
@@ -208,22 +234,46 @@
                     </nav>
 
                     <div className="max-w-6xl mx-auto p-4 md:p-8">
-                        <div className="flex justify-between items-end mb-8">
+                        <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-8 gap-4">
                             <div>
                                 <h1 className="text-3xl font-black text-slate-900 flex items-center gap-2">
                                     SlotPro <span className="bg-indigo-600 text-white text-xs px-2 py-1 rounded tracking-tighter">v2.0</span>
                                 </h1>
                                 <p className="text-slate-500 font-medium">Session Tracking</p>
                             </div>
-                            <div className="hidden md:flex bg-white rounded-xl shadow-sm p-1 border border-slate-200">
-                                {['dashboard', 'machines', 'history'].map(tab => (
-                                    <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>{tab}</button>
-                                ))}
+                            <div className="flex items-center gap-2">
+                                <div className="hidden md:flex bg-white rounded-xl shadow-sm p-1 border border-slate-200 mr-2">
+                                    {['dashboard', 'machines', 'history'].map(tab => (
+                                        <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>{tab}</button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
 
                         {activeTab === 'dashboard' && (
                             <div className="space-y-6">
+                                {/* Date Filter */}
+                                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-4">
+                                    <div className="flex items-center gap-2 text-slate-500">
+                                        <Icon name="Filter" size={16} />
+                                        <span className="text-xs font-black uppercase tracking-widest">Filter Data</span>
+                                    </div>
+                                    <input 
+                                        type="date" 
+                                        className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                                        value={filterDate}
+                                        onChange={(e) => setFilterDate(e.target.value)}
+                                    />
+                                    {filterDate && (
+                                        <button 
+                                            onClick={() => setFilterDate('')}
+                                            className="text-xs font-bold text-indigo-600 hover:underline"
+                                        >
+                                            Clear Filter
+                                        </button>
+                                    )}
+                                </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
                                         <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Total Bets</p>
@@ -238,14 +288,17 @@
                                         <p className="text-3xl font-black text-indigo-600">${stats.avgJackpot.toFixed(2)}</p>
                                     </div>
                                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                                        <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Total Sessions</p>
+                                        <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Sessions</p>
                                         <p className="text-3xl font-black text-slate-800">{stats.totalEntries}</p>
                                     </div>
                                 </div>
 
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
                                     <h2 className="text-xl font-black mb-6 flex items-center gap-2 text-slate-800">
-                                        <Icon name="BarChart3" className="text-indigo-600" /> Jackpots by Day
+                                        <Icon name="BarChart3" className="text-indigo-600" /> Jackpots Time-Series
+                                        <span className="text-xs font-bold text-slate-400 ml-auto">
+                                            {filterDate ? `Viewing: ${filterDate}` : 'All Time'}
+                                        </span>
                                     </h2>
                                     <div className="chart-container">
                                         <canvas ref={chartRef}></canvas>
@@ -350,7 +403,7 @@
                                                     <tr key={r.id} className="hover:bg-slate-50 transition">
                                                         <td className="px-6 py-4">
                                                             <div className="text-sm font-black text-slate-800">{r.day}</div>
-                                                            <div className="text-[10px] text-slate-400 font-bold uppercase">{r.displayDate}</div>
+                                                            <div className="text-[10px] text-slate-400 font-bold uppercase">{r.displayDate} @ {r.displayTime}</div>
                                                         </td>
                                                         <td className="px-6 py-4 font-black text-slate-800">{r.machineName}</td>
                                                         <td className="px-6 py-4">
