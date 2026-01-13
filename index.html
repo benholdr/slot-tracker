@@ -1,374 +1,300 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
-  BarChart, Bar, Cell
-} from 'recharts';
-import { 
-  PlusCircle, TrendingUp, MapPin, Gamepad2, DollarSign, Clock, Trash2, 
-  Download, LayoutDashboard, History, Settings, Smartphone, Calendar
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SlotPro v2.0 - Machine Tracker</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel for JSX parsing -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Recharts Dependencies - Recharts requires React to be in global scope -->
+    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .recharts-responsive-container { min-height: 300px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
 
-const App = () => {
-  // --- STATE & PERSISTENCE ---
-  const [machines, setMachines] = useState(() => {
-    const saved = localStorage.getItem('slot_tracker_machines');
-    return saved ? JSON.parse(saved) : [];
-  });
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+        
+        // Recharts extraction with safety check
+        const { 
+            LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+        } = window.Recharts || {};
 
-  const [records, setRecords] = useState(() => {
-    const saved = localStorage.getItem('slot_tracker_records');
-    return saved ? JSON.parse(saved) : [];
-  });
+        // Simple Icon Component Wrapper for Lucide
+        const Icon = ({ name, size = 20, className = "" }) => {
+            const icons = {
+                PlusCircle: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>,
+                TrendingUp: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+                MapPin: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>,
+                Smartphone: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>,
+                History: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>,
+                LayoutDashboard: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>,
+                Trash2: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>,
+                DollarSign: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            };
+            return icons[name] || null;
+        };
 
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'history', 'machines'
-  
-  // Form States
-  const [machineForm, setMachineForm] = useState({ name: '', location: '', type: '' });
-  const [recordForm, setRecordForm] = useState({ 
-    machineId: '', 
-    played: '', 
-    payout: '', 
-    payoutTime: new Date().toISOString().slice(0, 16) // Default to now
-  });
+        const App = () => {
+            const [machines, setMachines] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('slot_tracker_machines');
+                    return saved ? JSON.parse(saved) : [];
+                } catch (e) { return []; }
+            });
 
-  useEffect(() => {
-    localStorage.setItem('slot_tracker_machines', JSON.stringify(machines));
-    localStorage.setItem('slot_tracker_records', JSON.stringify(records));
-  }, [machines, records]);
+            const [records, setRecords] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('slot_tracker_records');
+                    return saved ? JSON.parse(saved) : [];
+                } catch (e) { return []; }
+            });
 
-  // --- ACTIONS ---
-  const addMachine = (e) => {
-    e.preventDefault();
-    if (!machineForm.name) return;
-    const newMachine = { ...machineForm, id: crypto.randomUUID() };
-    setMachines([...machines, newMachine]);
-    setMachineForm({ name: '', location: '', type: '' });
-  };
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [machineForm, setMachineForm] = useState({ name: '', location: '', type: '' });
+            const [recordForm, setRecordForm] = useState({ 
+                machineId: '', 
+                played: '', 
+                payout: '', 
+                payoutTime: new Date().toISOString().slice(0, 16)
+            });
 
-  const deleteMachine = (id) => {
-    if (confirm('Delete machine? All associated records will remain but lose machine metadata.')) {
-      setMachines(machines.filter(m => m.id !== id));
-    }
-  };
+            useEffect(() => {
+                localStorage.setItem('slot_tracker_machines', JSON.stringify(machines));
+                localStorage.setItem('slot_tracker_records', JSON.stringify(records));
+            }, [machines, records]);
 
-  const addRecord = (e) => {
-    e.preventDefault();
-    if (!recordForm.machineId || !recordForm.played) return;
+            const addMachine = (e) => {
+                e.preventDefault();
+                if (!machineForm.name) return;
+                const newMachine = { ...machineForm, id: self.crypto.randomUUID() };
+                setMachines([...machines, newMachine]);
+                setMachineForm({ name: '', location: '', type: '' });
+            };
 
-    const machine = machines.find(m => m.id === recordForm.machineId);
-    const payoutDate = new Date(recordForm.payoutTime);
+            const deleteMachine = (id) => {
+                if (window.confirm('Delete machine? All associated records will remain.')) {
+                    setMachines(machines.filter(m => m.id !== id));
+                }
+            };
 
-    const newRecord = {
-      id: crypto.randomUUID(),
-      machineId: recordForm.machineId,
-      machineName: machine?.name || 'Unknown Machine',
-      location: machine?.location || 'Unknown',
-      played: parseFloat(recordForm.played) || 0,
-      payout: parseFloat(recordForm.payout) || 0,
-      timestamp: payoutDate.toISOString(),
-      displayTime: payoutDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      displayDate: payoutDate.toLocaleDateString()
-    };
+            const addRecord = (e) => {
+                e.preventDefault();
+                if (!recordForm.machineId || !recordForm.played) return;
+                const machine = machines.find(m => m.id === recordForm.machineId);
+                const payoutDate = new Date(recordForm.payoutTime);
+                const newRecord = {
+                    id: self.crypto.randomUUID(),
+                    machineId: recordForm.machineId,
+                    machineName: machine?.name || 'Unknown Machine',
+                    location: machine?.location || 'Unknown',
+                    played: parseFloat(recordForm.played) || 0,
+                    payout: parseFloat(recordForm.payout) || 0,
+                    timestamp: payoutDate.toISOString(),
+                    displayTime: payoutDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    displayDate: payoutDate.toLocaleDateString()
+                };
+                setRecords([newRecord, ...records]);
+                setRecordForm({ ...recordForm, played: '', payout: '' });
+            };
 
-    setRecords([newRecord, ...records]);
-    setRecordForm({ ...recordForm, played: '', payout: '' });
-  };
+            const deleteRecord = (id) => {
+                if (window.confirm('Delete this entry?')) {
+                    setRecords(records.filter(r => r.id !== id));
+                }
+            };
 
-  const deleteRecord = (id) => {
-    if (confirm('Delete this entry?')) {
-      setRecords(records.filter(r => r.id !== id));
-    }
-  };
+            const stats = useMemo(() => {
+                const totalPlayed = records.reduce((acc, r) => acc + r.played, 0);
+                const totalPayout = records.reduce((acc, r) => acc + r.payout, 0);
+                return { totalPlayed, totalPayout, net: totalPayout - totalPlayed };
+            }, [records]);
 
-  // --- ANALYTICS ---
-  const stats = useMemo(() => {
-    const totalPlayed = records.reduce((acc, r) => acc + r.played, 0);
-    const totalPayout = records.reduce((acc, r) => acc + r.payout, 0);
-    return { totalPlayed, totalPayout, net: totalPayout - totalPlayed };
-  }, [records]);
+            const timeChartData = useMemo(() => {
+                return [...records]
+                    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+                    .map(r => ({
+                        time: r.displayTime,
+                        payout: r.payout,
+                        net: r.payout - r.played
+                    }));
+            }, [records]);
 
-  // Time-series data for the graph
-  const timeChartData = useMemo(() => {
-    return [...records]
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-      .map(r => ({
-        time: r.displayTime,
-        fullDate: r.displayDate,
-        machine: r.machineName,
-        payout: r.payout,
-        net: r.payout - r.played
-      }));
-  }, [records]);
+            return (
+                <div className="min-h-screen bg-[#F1F5F9] text-slate-900 pb-24 font-sans">
+                    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-50 md:hidden shadow-lg">
+                        <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center ${activeTab === 'dashboard' ? 'text-indigo-600' : 'text-slate-400'}`}>
+                            <Icon name="LayoutDashboard" size={20} />
+                            <span className="text-[10px] mt-1 font-bold">Stats</span>
+                        </button>
+                        <button onClick={() => setActiveTab('machines')} className={`flex flex-col items-center ${activeTab === 'machines' ? 'text-indigo-600' : 'text-slate-400'}`}>
+                            <Icon name="Smartphone" size={20} />
+                            <span className="text-[10px] mt-1 font-bold">Machines</span>
+                        </button>
+                        <button onClick={() => setActiveTab('history')} className={`flex flex-col items-center ${activeTab === 'history' ? 'text-indigo-600' : 'text-slate-400'}`}>
+                            <Icon name="History" size={20} />
+                            <span className="text-[10px] mt-1 font-bold">History</span>
+                        </button>
+                    </nav>
 
-  return (
-    <div className="min-h-screen bg-[#F1F5F9] text-slate-900 pb-24 font-sans">
-      {/* Mobile Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-50 md:hidden shadow-lg">
-        {[
-          { id: 'dashboard', icon: LayoutDashboard, label: 'Stats' },
-          { id: 'machines', icon: Smartphone, label: 'Machines' },
-          { id: 'history', icon: History, label: 'History' }
-        ].map(tab => (
-          <button 
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)} 
-            className={`flex flex-col items-center ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-400'}`}
-          >
-            <tab.icon size={20} />
-            <span className="text-[10px] mt-1 font-bold">{tab.label}</span>
-          </button>
-        ))}
-      </nav>
+                    <div className="max-w-6xl mx-auto p-4 md:p-8">
+                        <div className="flex justify-between items-end mb-8">
+                            <div>
+                                <h1 className="text-3xl font-black text-slate-900 flex items-center gap-2">
+                                    SlotPro <span className="bg-indigo-600 text-white text-xs px-2 py-1 rounded tracking-tighter">v2.0</span>
+                                </h1>
+                                <p className="text-slate-500 font-medium">Advanced Tracking</p>
+                            </div>
+                            <div className="hidden md:flex bg-white rounded-xl shadow-sm p-1 border border-slate-200">
+                                {['dashboard', 'machines', 'history'].map(tab => (
+                                    <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>{tab}</button>
+                                ))}
+                            </div>
+                        </div>
 
-      <div className="max-w-6xl mx-auto p-4 md:p-8">
-        {/* Top Header */}
-        <div className="flex justify-between items-end mb-8">
-          <div>
-            <h1 className="text-3xl font-black text-slate-900 flex items-center gap-2">
-              SlotPro <span className="bg-indigo-600 text-white text-xs px-2 py-1 rounded">v2.0</span>
-            </h1>
-            <p className="text-slate-500 font-medium">Advanced Machine Tracking</p>
-          </div>
-          <div className="hidden md:flex bg-white rounded-xl shadow-sm p-1 border border-slate-200">
-            {['dashboard', 'machines', 'history'].map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </div>
+                        {activeTab === 'dashboard' && (
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                                        <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Lifetime In</p>
+                                        <p className="text-3xl font-black text-slate-800">${stats.totalPlayed.toFixed(2)}</p>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                                        <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Lifetime Out</p>
+                                        <p className="text-3xl font-black text-emerald-500">${stats.totalPayout.toFixed(2)}</p>
+                                    </div>
+                                    <div className={`p-6 rounded-3xl shadow-sm border border-slate-200 ${stats.net >= 0 ? 'bg-indigo-50 border-indigo-100' : 'bg-rose-50 border-rose-100'}`}>
+                                        <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Total Net</p>
+                                        <p className={`text-3xl font-black ${stats.net >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                                            {stats.net >= 0 ? '+' : ''}${stats.net.toFixed(2)}
+                                        </p>
+                                    </div>
+                                </div>
 
-        {/* Dashboard Tab */}
-        {activeTab === 'dashboard' && (
-          <div className="space-y-6 animate-in fade-in duration-500">
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Lifetime In</p>
-                <p className="text-3xl font-black text-slate-800">${stats.totalPlayed.toFixed(2)}</p>
-              </div>
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Lifetime Out</p>
-                <p className="text-3xl font-black text-emerald-500">${stats.totalPayout.toFixed(2)}</p>
-              </div>
-              <div className={`p-6 rounded-3xl shadow-sm border border-slate-200 ${stats.net >= 0 ? 'bg-indigo-50 border-indigo-100' : 'bg-rose-50 border-rose-100'}`}>
-                <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Total Net</p>
-                <p className={`text-3xl font-black ${stats.net >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-                  {stats.net >= 0 ? '+' : ''}${stats.net.toFixed(2)}
-                </p>
-              </div>
-            </div>
+                                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                                    <div className="lg:col-span-4">
+                                        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 sticky top-8">
+                                            <h2 className="text-xl font-black mb-6 flex items-center gap-2 text-slate-800">
+                                                <Icon name="PlusCircle" className="text-indigo-600" /> Log Payout
+                                            </h2>
+                                            <form onSubmit={addRecord} className="space-y-4">
+                                                <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500" value={recordForm.machineId} onChange={(e) => setRecordForm({...recordForm, machineId: e.target.value})} required>
+                                                    <option value="">Choose Machine...</option>
+                                                    {machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                                </select>
+                                                <input type="datetime-local" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.payoutTime} onChange={(e) => setRecordForm({...recordForm, payoutTime: e.target.value})} />
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <input type="number" step="0.01" placeholder="In ($)" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.played} onChange={(e) => setRecordForm({...recordForm, played: e.target.value})} required />
+                                                    <input type="number" step="0.01" placeholder="Out ($)" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.payout} onChange={(e) => setRecordForm({...recordForm, payout: e.target.value})} required />
+                                                </div>
+                                                <button type="submit" className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-indigo-700 transition active:scale-95">Save Entry</button>
+                                            </form>
+                                        </div>
+                                    </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Log Entry Form */}
-              <div className="lg:col-span-4">
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 sticky top-8">
-                  <h2 className="text-xl font-black mb-6 flex items-center gap-2">
-                    <PlusCircle size={24} className="text-indigo-600" /> Log Payout
-                  </h2>
-                  <form onSubmit={addRecord} className="space-y-4">
-                    <div>
-                      <label className="text-xs font-black text-slate-400 uppercase mb-2 block">Select Machine</label>
-                      <select 
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
-                        value={recordForm.machineId}
-                        onChange={(e) => setRecordForm({...recordForm, machineId: e.target.value})}
-                        required
-                      >
-                        <option value="">Choose Machine...</option>
-                        {machines.map(m => (
-                          <option key={m.id} value={m.id}>{m.name} ({m.location})</option>
-                        ))}
-                      </select>
+                                    <div className="lg:col-span-8 bg-white p-6 rounded-3xl shadow-sm border border-slate-200 min-h-[450px]">
+                                        <h2 className="text-xl font-black mb-8 flex items-center gap-2">
+                                            <Icon name="TrendingUp" className="text-emerald-500" /> Payout Timeline
+                                        </h2>
+                                        <div className="h-[350px]">
+                                            {(records.length > 0 && window.Recharts) ? (
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <LineChart data={timeChartData}>
+                                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                        <XAxis dataKey="time" hide />
+                                                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
+                                                        <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                                                        <Line type="monotone" dataKey="payout" stroke="#10b981" strokeWidth={3} dot={{r: 4}} name="Payout" />
+                                                        <Line type="monotone" dataKey="net" stroke="#6366f1" strokeWidth={3} dot={{r: 4}} name="Net" />
+                                                    </LineChart>
+                                                </ResponsiveContainer>
+                                            ) : <div className="h-full flex items-center justify-center text-slate-300 font-bold border-2 border-dashed border-slate-100 rounded-2xl">No records yet</div>}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'machines' && (
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                                <div className="lg:col-span-4">
+                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                                        <h2 className="text-xl font-black mb-6 text-slate-800">Create Machine</h2>
+                                        <form onSubmit={addMachine} className="space-y-4">
+                                            <input placeholder="Machine Name" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none" value={machineForm.name} onChange={e => setMachineForm({...machineForm, name: e.target.value})} required />
+                                            <input placeholder="Location" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none" value={machineForm.location} onChange={e => setMachineForm({...machineForm, location: e.target.value})} />
+                                            <button className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-black transition">Register</button>
+                                        </form>
+                                    </div>
+                                </div>
+                                <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {machines.map(m => (
+                                        <div key={m.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex justify-between items-start hover:shadow-md transition duration-300">
+                                            <div>
+                                                <h3 className="font-black text-lg text-slate-800">{m.name}</h3>
+                                                <p className="text-slate-400 text-sm font-bold flex items-center gap-1 mt-1"><Icon name="MapPin" size={14}/> {m.location}</p>
+                                            </div>
+                                            <button onClick={() => deleteMachine(m.id)} className="text-slate-200 hover:text-rose-500 transition"><Icon name="Trash2" /></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'history' && (
+                            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead className="bg-slate-50 border-b border-slate-100">
+                                            <tr>
+                                                <th className="text-left px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Time</th>
+                                                <th className="text-left px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Machine</th>
+                                                <th className="text-right px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Net</th>
+                                                <th className="px-6 py-5"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {records.map(r => (
+                                                <tr key={r.id} className="hover:bg-slate-50 transition">
+                                                    <td className="px-6 py-4">
+                                                        <div className="text-sm font-black text-slate-800">{r.displayTime}</div>
+                                                        <div className="text-[10px] text-slate-400 font-bold">{r.displayDate}</div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="text-sm font-black text-slate-800">{r.machineName}</div>
+                                                    </td>
+                                                    <td className={`px-6 py-4 text-right font-black ${r.payout - r.played >= 0 ? 'text-indigo-600' : 'text-rose-500'}`}>
+                                                        ${(r.payout - r.played).toFixed(2)}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <button onClick={() => deleteRecord(r.id)} className="text-slate-200 hover:text-rose-500 transition"><Icon name="Trash2" size={18} /></button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                    <div>
-                      <label className="text-xs font-black text-slate-400 uppercase mb-2 block">Time of Payout</label>
-                      <input 
-                        type="datetime-local"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
-                        value={recordForm.payoutTime}
-                        onChange={(e) => setRecordForm({...recordForm, payoutTime: e.target.value})}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-xs font-black text-slate-400 uppercase mb-2 block">Played ($)</label>
-                        <input 
-                          type="number" step="0.01" placeholder="0.00"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
-                          value={recordForm.played}
-                          onChange={(e) => setRecordForm({...recordForm, played: e.target.value})}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-black text-slate-400 uppercase mb-2 block">Payout ($)</label>
-                        <input 
-                          type="number" step="0.01" placeholder="0.00"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
-                          value={recordForm.payout}
-                          onChange={(e) => setRecordForm({...recordForm, payout: e.target.value})}
-                          required
-                        />
-                      </div>
-                    </div>
-                    <button type="submit" className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition active:scale-95">
-                      Save Entry
-                    </button>
-                  </form>
                 </div>
-              </div>
+            );
+        };
 
-              {/* Performance Graph */}
-              <div className="lg:col-span-8 bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-xl font-black">Payout Timeline</h2>
-                  <div className="flex gap-2 text-xs font-bold text-slate-400">
-                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-400"></div> Payout</span>
-                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> Net</span>
-                  </div>
-                </div>
-                <div className="h-[400px]">
-                  {records.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={timeChartData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="time" hide />
-                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
-                        <Tooltip 
-                          contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
-                          labelStyle={{fontWeight: 'bold', marginBottom: '4px'}}
-                        />
-                        <Legend iconType="circle" />
-                        <Line type="monotone" dataKey="payout" stroke="#10b981" strokeWidth={3} dot={{r: 4, fill: '#10b981'}} name="Payout Amount" />
-                        <Line type="monotone" dataKey="net" stroke="#6366f1" strokeWidth={3} dot={{r: 4, fill: '#6366f1'}} name="Net Result" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-300">
-                      <TrendingUp size={48} strokeWidth={1} className="mb-2" />
-                      <p className="font-bold">Enter payouts to see trends</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Machines Tab */}
-        {activeTab === 'machines' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in slide-in-from-right duration-500">
-            <div className="lg:col-span-4">
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                <h2 className="text-xl font-black mb-6">Create Machine</h2>
-                <form onSubmit={addMachine} className="space-y-4">
-                  <input 
-                    placeholder="Machine Name (e.g. Buffalo #4)"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none"
-                    value={machineForm.name}
-                    onChange={e => setMachineForm({...machineForm, name: e.target.value})}
-                    required
-                  />
-                  <input 
-                    placeholder="Location (e.g. High Limit)"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none"
-                    value={machineForm.location}
-                    onChange={e => setMachineForm({...machineForm, location: e.target.value})}
-                  />
-                  <input 
-                    placeholder="Game Type (e.g. Video Poker)"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none"
-                    value={machineForm.type}
-                    onChange={e => setMachineForm({...machineForm, type: e.target.value})}
-                  />
-                  <button className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-black transition">
-                    Register Machine
-                  </button>
-                </form>
-              </div>
-            </div>
-            <div className="lg:col-span-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {machines.map(m => (
-                  <div key={m.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex justify-between items-start group hover:border-indigo-300 transition">
-                    <div>
-                      <h3 className="font-black text-lg text-slate-800">{m.name}</h3>
-                      <p className="text-slate-400 text-sm font-bold flex items-center gap-1 mt-1">
-                        <MapPin size={14} /> {m.location || 'Unknown Floor'}
-                      </p>
-                      <p className="text-indigo-600 text-xs font-black uppercase mt-2 tracking-widest">{m.type || 'Standard Slot'}</p>
-                    </div>
-                    <button onClick={() => deleteMachine(m.id)} className="text-slate-200 hover:text-rose-500 transition">
-                      <Trash2 size={20} />
-                    </button>
-                  </div>
-                ))}
-                {machines.length === 0 && (
-                  <div className="col-span-full py-12 text-center text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-3xl">
-                    No machines created yet.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* History Tab */}
-        {activeTab === 'history' && (
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden animate-in slide-in-from-bottom duration-500">
-             <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="text-left px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Time</th>
-                      <th className="text-left px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Machine</th>
-                      <th className="text-right px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">In/Out</th>
-                      <th className="text-right px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Net</th>
-                      <th className="px-6 py-5"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {records.map(r => (
-                      <tr key={r.id} className="hover:bg-slate-50 transition">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-black text-slate-800">{r.displayTime}</span>
-                            <span className="text-[10px] text-slate-400 font-bold uppercase">{r.displayDate}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-black text-slate-800">{r.machineName}</span>
-                            <span className="text-xs text-slate-400 font-medium">{r.location}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="text-xs font-bold text-slate-400">In: ${r.played.toFixed(2)}</div>
-                          <div className="text-sm font-black text-emerald-600">Out: ${r.payout.toFixed(2)}</div>
-                        </td>
-                        <td className={`px-6 py-4 text-right font-black ${r.payout - r.played >= 0 ? 'text-indigo-600' : 'text-rose-500'}`}>
-                          {r.payout - r.played >= 0 ? '+' : '-'}${Math.abs(r.payout - r.played).toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <button onClick={() => deleteRecord(r.id)} className="text-slate-200 hover:text-rose-500 transition">
-                            <Trash2 size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-             </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-export default App;
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
