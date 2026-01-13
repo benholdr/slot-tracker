@@ -1,191 +1,374 @@
-import React, { useState, useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { PlusCircle, TrendingUp, MapPin, Slot, DollarSign, Clock } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
+  BarChart, Bar, Cell
+} from 'recharts';
+import { 
+  PlusCircle, TrendingUp, MapPin, Gamepad2, DollarSign, Clock, Trash2, 
+  Download, LayoutDashboard, History, Settings, Smartphone, Calendar
+} from 'lucide-react';
 
-const SlotTrackerApp = () => {
-  // --- STATE ---
-  const [records, setRecords] = useState([
-    { id: 1, location: 'North Floor', game: 'Buffalo Gold', played: 50, payout: 120, time: '10:30 AM' },
-    { id: 2, location: 'VIP Lounge', game: 'Wheel of Fortune', played: 100, payout: 40, time: '11:15 AM' },
-    { id: 3, location: 'North Floor', game: 'Video Poker', played: 20, payout: 200, time: '12:00 PM' },
-  ]);
-
-  const [formData, setFormData] = useState({
-    location: '',
-    game: '',
-    played: '',
-    payout: ''
+const App = () => {
+  // --- STATE & PERSISTENCE ---
+  const [machines, setMachines] = useState(() => {
+    const saved = localStorage.getItem('slot_tracker_machines');
+    return saved ? JSON.parse(saved) : [];
   });
 
-  const [groupBy, setGroupBy] = useState('location'); // Toggle: 'location' or 'game'
-  const [metric, setMetric] = useState('payout'); // Toggle: 'payout' or 'played'
+  const [records, setRecords] = useState(() => {
+    const saved = localStorage.getItem('slot_tracker_records');
+    return saved ? JSON.parse(saved) : [];
+  });
 
-  // --- LOGIC ---
-  const handleAddRecord = (e) => {
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'history', 'machines'
+  
+  // Form States
+  const [machineForm, setMachineForm] = useState({ name: '', location: '', type: '' });
+  const [recordForm, setRecordForm] = useState({ 
+    machineId: '', 
+    played: '', 
+    payout: '', 
+    payoutTime: new Date().toISOString().slice(0, 16) // Default to now
+  });
+
+  useEffect(() => {
+    localStorage.setItem('slot_tracker_machines', JSON.stringify(machines));
+    localStorage.setItem('slot_tracker_records', JSON.stringify(records));
+  }, [machines, records]);
+
+  // --- ACTIONS ---
+  const addMachine = (e) => {
     e.preventDefault();
-    const newRecord = {
-      ...formData,
-      id: Date.now(),
-      played: Number(formData.played),
-      payout: Number(formData.payout),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    setRecords([newRecord, ...records]);
-    setFormData({ location: '', game: '', played: '', payout: '' });
+    if (!machineForm.name) return;
+    const newMachine = { ...machineForm, id: crypto.randomUUID() };
+    setMachines([...machines, newMachine]);
+    setMachineForm({ name: '', location: '', type: '' });
   };
 
-  // Prepare data for the graph based on toggles
-  const chartData = useMemo(() => {
-    const agg = records.reduce((acc, curr) => {
-      const key = curr[groupBy];
-      if (!acc[key]) acc[key] = { name: key, played: 0, payout: 0, net: 0 };
-      acc[key].played += curr.played;
-      acc[key].payout += curr.payout;
-      acc[key].net += (curr.payout - curr.played);
-      return acc;
-    }, {});
-    return Object.values(agg);
-  }, [records, groupBy]);
+  const deleteMachine = (id) => {
+    if (confirm('Delete machine? All associated records will remain but lose machine metadata.')) {
+      setMachines(machines.filter(m => m.id !== id));
+    }
+  };
 
-  // --- RENDER ---
+  const addRecord = (e) => {
+    e.preventDefault();
+    if (!recordForm.machineId || !recordForm.played) return;
+
+    const machine = machines.find(m => m.id === recordForm.machineId);
+    const payoutDate = new Date(recordForm.payoutTime);
+
+    const newRecord = {
+      id: crypto.randomUUID(),
+      machineId: recordForm.machineId,
+      machineName: machine?.name || 'Unknown Machine',
+      location: machine?.location || 'Unknown',
+      played: parseFloat(recordForm.played) || 0,
+      payout: parseFloat(recordForm.payout) || 0,
+      timestamp: payoutDate.toISOString(),
+      displayTime: payoutDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      displayDate: payoutDate.toLocaleDateString()
+    };
+
+    setRecords([newRecord, ...records]);
+    setRecordForm({ ...recordForm, played: '', payout: '' });
+  };
+
+  const deleteRecord = (id) => {
+    if (confirm('Delete this entry?')) {
+      setRecords(records.filter(r => r.id !== id));
+    }
+  };
+
+  // --- ANALYTICS ---
+  const stats = useMemo(() => {
+    const totalPlayed = records.reduce((acc, r) => acc + r.played, 0);
+    const totalPayout = records.reduce((acc, r) => acc + r.payout, 0);
+    return { totalPlayed, totalPayout, net: totalPayout - totalPlayed };
+  }, [records]);
+
+  // Time-series data for the graph
+  const timeChartData = useMemo(() => {
+    return [...records]
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      .map(r => ({
+        time: r.displayTime,
+        fullDate: r.displayDate,
+        machine: r.machineName,
+        payout: r.payout,
+        net: r.payout - r.played
+      }));
+  }, [records]);
+
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans">
-      <div className="max-w-6xl mx-auto space-y-6">
-        
-        {/* Header & Stats */}
-        <header className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-xl shadow-sm">
+    <div className="min-h-screen bg-[#F1F5F9] text-slate-900 pb-24 font-sans">
+      {/* Mobile Nav */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-50 md:hidden shadow-lg">
+        {[
+          { id: 'dashboard', icon: LayoutDashboard, label: 'Stats' },
+          { id: 'machines', icon: Smartphone, label: 'Machines' },
+          { id: 'history', icon: History, label: 'History' }
+        ].map(tab => (
+          <button 
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)} 
+            className={`flex flex-col items-center ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-400'}`}
+          >
+            <tab.icon size={20} />
+            <span className="text-[10px] mt-1 font-bold">{tab.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      <div className="max-w-6xl mx-auto p-4 md:p-8">
+        {/* Top Header */}
+        <div className="flex justify-between items-end mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Slot Performance Tracker</h1>
-            <p className="text-gray-500 text-sm">Real-time gaming analytics</p>
+            <h1 className="text-3xl font-black text-slate-900 flex items-center gap-2">
+              SlotPro <span className="bg-indigo-600 text-white text-xs px-2 py-1 rounded">v2.0</span>
+            </h1>
+            <p className="text-slate-500 font-medium">Advanced Machine Tracking</p>
           </div>
-          <div className="flex gap-6">
-            <div className="text-center">
-              <p className="text-xs text-gray-400 uppercase font-semibold">Total Net</p>
-              <p className={`text-xl font-bold ${records.reduce((a, b) => a + (b.payout - b.played), 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                ${records.reduce((a, b) => a + (b.payout - b.played), 0)}
-              </p>
-            </div>
-          </div>
-        </header>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Form Section */}
-          <section className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex items-center gap-2 mb-4 text-blue-600 font-semibold">
-              <PlusCircle size={20} />
-              <h2>Log New Session</h2>
-            </div>
-            <form onSubmit={handleAddRecord} className="space-y-4">
-              <input 
-                placeholder="Location (e.g. North Hall)" 
-                className="w-full p-2 border rounded-md"
-                value={formData.location}
-                onChange={(e) => setFormData({...formData, location: e.target.value})}
-                required
-              />
-              <input 
-                placeholder="Game Type (e.g. Buffalo Gold)" 
-                className="w-full p-2 border rounded-md"
-                value={formData.game}
-                onChange={(e) => setFormData({...formData, game: e.target.value})}
-                required
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <input 
-                  type="number" placeholder="Amt Played $" 
-                  className="w-full p-2 border rounded-md"
-                  value={formData.played}
-                  onChange={(e) => setFormData({...formData, played: e.target.value})}
-                  required
-                />
-                <input 
-                  type="number" placeholder="Payout $" 
-                  className="w-full p-2 border rounded-md"
-                  value={formData.payout}
-                  onChange={(e) => setFormData({...formData, payout: e.target.value})}
-                  required
-                />
-              </div>
-              <button className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition">
-                Add Entry
+          <div className="hidden md:flex bg-white rounded-xl shadow-sm p-1 border border-slate-200">
+            {['dashboard', 'machines', 'history'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                {tab}
               </button>
-            </form>
-          </section>
-
-          {/* Graph Section */}
-          <section className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-              <div className="flex items-center gap-2 text-purple-600 font-semibold">
-                <TrendingUp size={20} />
-                <h2>Performance Analytics</h2>
-              </div>
-              {/* Toggles */}
-              <div className="flex bg-gray-100 p-1 rounded-lg text-xs">
-                <button 
-                  onClick={() => setGroupBy('location')}
-                  className={`px-3 py-1 rounded-md ${groupBy === 'location' ? 'bg-white shadow-sm' : ''}`}
-                >Location</button>
-                <button 
-                  onClick={() => setGroupBy('game')}
-                  className={`px-3 py-1 rounded-md ${groupBy === 'game' ? 'bg-white shadow-sm' : ''}`}
-                >Game</button>
-              </div>
-            </div>
-
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip cursor={{fill: '#f3f4f6'}} />
-                  <Legend />
-                  <Bar dataKey="played" fill="#94a3b8" name="Amount Played" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="payout" fill="#10b981" name="Payout" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
+            ))}
+          </div>
         </div>
 
-        {/* Table Section */}
-        <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-6 border-b border-gray-50 flex justify-between items-center">
-            <h2 className="font-semibold text-gray-700">Recent Activity</h2>
+        {/* Dashboard Tab */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            {/* Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Lifetime In</p>
+                <p className="text-3xl font-black text-slate-800">${stats.totalPlayed.toFixed(2)}</p>
+              </div>
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Lifetime Out</p>
+                <p className="text-3xl font-black text-emerald-500">${stats.totalPayout.toFixed(2)}</p>
+              </div>
+              <div className={`p-6 rounded-3xl shadow-sm border border-slate-200 ${stats.net >= 0 ? 'bg-indigo-50 border-indigo-100' : 'bg-rose-50 border-rose-100'}`}>
+                <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Total Net</p>
+                <p className={`text-3xl font-black ${stats.net >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                  {stats.net >= 0 ? '+' : ''}${stats.net.toFixed(2)}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Log Entry Form */}
+              <div className="lg:col-span-4">
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 sticky top-8">
+                  <h2 className="text-xl font-black mb-6 flex items-center gap-2">
+                    <PlusCircle size={24} className="text-indigo-600" /> Log Payout
+                  </h2>
+                  <form onSubmit={addRecord} className="space-y-4">
+                    <div>
+                      <label className="text-xs font-black text-slate-400 uppercase mb-2 block">Select Machine</label>
+                      <select 
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                        value={recordForm.machineId}
+                        onChange={(e) => setRecordForm({...recordForm, machineId: e.target.value})}
+                        required
+                      >
+                        <option value="">Choose Machine...</option>
+                        {machines.map(m => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.location})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-black text-slate-400 uppercase mb-2 block">Time of Payout</label>
+                      <input 
+                        type="datetime-local"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                        value={recordForm.payoutTime}
+                        onChange={(e) => setRecordForm({...recordForm, payoutTime: e.target.value})}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-black text-slate-400 uppercase mb-2 block">Played ($)</label>
+                        <input 
+                          type="number" step="0.01" placeholder="0.00"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                          value={recordForm.played}
+                          onChange={(e) => setRecordForm({...recordForm, played: e.target.value})}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-black text-slate-400 uppercase mb-2 block">Payout ($)</label>
+                        <input 
+                          type="number" step="0.01" placeholder="0.00"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                          value={recordForm.payout}
+                          onChange={(e) => setRecordForm({...recordForm, payout: e.target.value})}
+                          required
+                        />
+                      </div>
+                    </div>
+                    <button type="submit" className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition active:scale-95">
+                      Save Entry
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              {/* Performance Graph */}
+              <div className="lg:col-span-8 bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-xl font-black">Payout Timeline</h2>
+                  <div className="flex gap-2 text-xs font-bold text-slate-400">
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-400"></div> Payout</span>
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> Net</span>
+                  </div>
+                </div>
+                <div className="h-[400px]">
+                  {records.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={timeChartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="time" hide />
+                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
+                        <Tooltip 
+                          contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                          labelStyle={{fontWeight: 'bold', marginBottom: '4px'}}
+                        />
+                        <Legend iconType="circle" />
+                        <Line type="monotone" dataKey="payout" stroke="#10b981" strokeWidth={3} dot={{r: 4, fill: '#10b981'}} name="Payout Amount" />
+                        <Line type="monotone" dataKey="net" stroke="#6366f1" strokeWidth={3} dot={{r: 4, fill: '#6366f1'}} name="Net Result" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-300">
+                      <TrendingUp size={48} strokeWidth={1} className="mb-2" />
+                      <p className="font-bold">Enter payouts to see trends</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-                <tr>
-                  <th className="px-6 py-3">Time</th>
-                  <th className="px-6 py-3">Location</th>
-                  <th className="px-6 py-3">Game</th>
-                  <th className="px-6 py-3">Played</th>
-                  <th className="px-6 py-3">Payout</th>
-                  <th className="px-6 py-3 text-right">Net</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {records.map((r) => (
-                  <tr key={r.id} className="hover:bg-gray-50 transition">
-                    <td className="px-6 py-4 text-sm text-gray-400"><Clock size={14} className="inline mr-1" />{r.time}</td>
-                    <td className="px-6 py-4 font-medium text-gray-700"><MapPin size={14} className="inline mr-1 text-gray-400" />{r.location}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600"><Slot size={14} className="inline mr-1 text-gray-400" />{r.game}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">${r.played}</td>
-                    <td className="px-6 py-4 text-sm text-green-600 font-semibold">${r.payout}</td>
-                    <td className={`px-6 py-4 text-sm text-right font-bold ${(r.payout - r.played) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      { (r.payout - r.played) >= 0 ? '+' : '' }{r.payout - r.played}
-                    </td>
-                  </tr>
+        )}
+
+        {/* Machines Tab */}
+        {activeTab === 'machines' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in slide-in-from-right duration-500">
+            <div className="lg:col-span-4">
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                <h2 className="text-xl font-black mb-6">Create Machine</h2>
+                <form onSubmit={addMachine} className="space-y-4">
+                  <input 
+                    placeholder="Machine Name (e.g. Buffalo #4)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none"
+                    value={machineForm.name}
+                    onChange={e => setMachineForm({...machineForm, name: e.target.value})}
+                    required
+                  />
+                  <input 
+                    placeholder="Location (e.g. High Limit)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none"
+                    value={machineForm.location}
+                    onChange={e => setMachineForm({...machineForm, location: e.target.value})}
+                  />
+                  <input 
+                    placeholder="Game Type (e.g. Video Poker)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none"
+                    value={machineForm.type}
+                    onChange={e => setMachineForm({...machineForm, type: e.target.value})}
+                  />
+                  <button className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-black transition">
+                    Register Machine
+                  </button>
+                </form>
+              </div>
+            </div>
+            <div className="lg:col-span-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {machines.map(m => (
+                  <div key={m.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex justify-between items-start group hover:border-indigo-300 transition">
+                    <div>
+                      <h3 className="font-black text-lg text-slate-800">{m.name}</h3>
+                      <p className="text-slate-400 text-sm font-bold flex items-center gap-1 mt-1">
+                        <MapPin size={14} /> {m.location || 'Unknown Floor'}
+                      </p>
+                      <p className="text-indigo-600 text-xs font-black uppercase mt-2 tracking-widest">{m.type || 'Standard Slot'}</p>
+                    </div>
+                    <button onClick={() => deleteMachine(m.id)} className="text-slate-200 hover:text-rose-500 transition">
+                      <Trash2 size={20} />
+                    </button>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+                {machines.length === 0 && (
+                  <div className="col-span-full py-12 text-center text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-3xl">
+                    No machines created yet.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </section>
+        )}
+
+        {/* History Tab */}
+        {activeTab === 'history' && (
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden animate-in slide-in-from-bottom duration-500">
+             <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="text-left px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Time</th>
+                      <th className="text-left px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Machine</th>
+                      <th className="text-right px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">In/Out</th>
+                      <th className="text-right px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Net</th>
+                      <th className="px-6 py-5"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {records.map(r => (
+                      <tr key={r.id} className="hover:bg-slate-50 transition">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-black text-slate-800">{r.displayTime}</span>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase">{r.displayDate}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-black text-slate-800">{r.machineName}</span>
+                            <span className="text-xs text-slate-400 font-medium">{r.location}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="text-xs font-bold text-slate-400">In: ${r.played.toFixed(2)}</div>
+                          <div className="text-sm font-black text-emerald-600">Out: ${r.payout.toFixed(2)}</div>
+                        </td>
+                        <td className={`px-6 py-4 text-right font-black ${r.payout - r.played >= 0 ? 'text-indigo-600' : 'text-rose-500'}`}>
+                          {r.payout - r.played >= 0 ? '+' : '-'}${Math.abs(r.payout - r.played).toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button onClick={() => deleteRecord(r.id)} className="text-slate-200 hover:text-rose-500 transition">
+                            <Trash2 size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+             </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-export default SlotTrackerApp;
+export default App;
