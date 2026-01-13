@@ -1,0 +1,191 @@
+import React, { useState, useMemo } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PlusCircle, TrendingUp, MapPin, Slot, DollarSign, Clock } from 'lucide-react';
+
+const SlotTrackerApp = () => {
+  // --- STATE ---
+  const [records, setRecords] = useState([
+    { id: 1, location: 'North Floor', game: 'Buffalo Gold', played: 50, payout: 120, time: '10:30 AM' },
+    { id: 2, location: 'VIP Lounge', game: 'Wheel of Fortune', played: 100, payout: 40, time: '11:15 AM' },
+    { id: 3, location: 'North Floor', game: 'Video Poker', played: 20, payout: 200, time: '12:00 PM' },
+  ]);
+
+  const [formData, setFormData] = useState({
+    location: '',
+    game: '',
+    played: '',
+    payout: ''
+  });
+
+  const [groupBy, setGroupBy] = useState('location'); // Toggle: 'location' or 'game'
+  const [metric, setMetric] = useState('payout'); // Toggle: 'payout' or 'played'
+
+  // --- LOGIC ---
+  const handleAddRecord = (e) => {
+    e.preventDefault();
+    const newRecord = {
+      ...formData,
+      id: Date.now(),
+      played: Number(formData.played),
+      payout: Number(formData.payout),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setRecords([newRecord, ...records]);
+    setFormData({ location: '', game: '', played: '', payout: '' });
+  };
+
+  // Prepare data for the graph based on toggles
+  const chartData = useMemo(() => {
+    const agg = records.reduce((acc, curr) => {
+      const key = curr[groupBy];
+      if (!acc[key]) acc[key] = { name: key, played: 0, payout: 0, net: 0 };
+      acc[key].played += curr.played;
+      acc[key].payout += curr.payout;
+      acc[key].net += (curr.payout - curr.played);
+      return acc;
+    }, {});
+    return Object.values(agg);
+  }, [records, groupBy]);
+
+  // --- RENDER ---
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans">
+      <div className="max-w-6xl mx-auto space-y-6">
+        
+        {/* Header & Stats */}
+        <header className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-xl shadow-sm">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">Slot Performance Tracker</h1>
+            <p className="text-gray-500 text-sm">Real-time gaming analytics</p>
+          </div>
+          <div className="flex gap-6">
+            <div className="text-center">
+              <p className="text-xs text-gray-400 uppercase font-semibold">Total Net</p>
+              <p className={`text-xl font-bold ${records.reduce((a, b) => a + (b.payout - b.played), 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                ${records.reduce((a, b) => a + (b.payout - b.played), 0)}
+              </p>
+            </div>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Form Section */}
+          <section className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center gap-2 mb-4 text-blue-600 font-semibold">
+              <PlusCircle size={20} />
+              <h2>Log New Session</h2>
+            </div>
+            <form onSubmit={handleAddRecord} className="space-y-4">
+              <input 
+                placeholder="Location (e.g. North Hall)" 
+                className="w-full p-2 border rounded-md"
+                value={formData.location}
+                onChange={(e) => setFormData({...formData, location: e.target.value})}
+                required
+              />
+              <input 
+                placeholder="Game Type (e.g. Buffalo Gold)" 
+                className="w-full p-2 border rounded-md"
+                value={formData.game}
+                onChange={(e) => setFormData({...formData, game: e.target.value})}
+                required
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <input 
+                  type="number" placeholder="Amt Played $" 
+                  className="w-full p-2 border rounded-md"
+                  value={formData.played}
+                  onChange={(e) => setFormData({...formData, played: e.target.value})}
+                  required
+                />
+                <input 
+                  type="number" placeholder="Payout $" 
+                  className="w-full p-2 border rounded-md"
+                  value={formData.payout}
+                  onChange={(e) => setFormData({...formData, payout: e.target.value})}
+                  required
+                />
+              </div>
+              <button className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition">
+                Add Entry
+              </button>
+            </form>
+          </section>
+
+          {/* Graph Section */}
+          <section className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+              <div className="flex items-center gap-2 text-purple-600 font-semibold">
+                <TrendingUp size={20} />
+                <h2>Performance Analytics</h2>
+              </div>
+              {/* Toggles */}
+              <div className="flex bg-gray-100 p-1 rounded-lg text-xs">
+                <button 
+                  onClick={() => setGroupBy('location')}
+                  className={`px-3 py-1 rounded-md ${groupBy === 'location' ? 'bg-white shadow-sm' : ''}`}
+                >Location</button>
+                <button 
+                  onClick={() => setGroupBy('game')}
+                  className={`px-3 py-1 rounded-md ${groupBy === 'game' ? 'bg-white shadow-sm' : ''}`}
+                >Game</button>
+              </div>
+            </div>
+
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip cursor={{fill: '#f3f4f6'}} />
+                  <Legend />
+                  <Bar dataKey="played" fill="#94a3b8" name="Amount Played" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="payout" fill="#10b981" name="Payout" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+        </div>
+
+        {/* Table Section */}
+        <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b border-gray-50 flex justify-between items-center">
+            <h2 className="font-semibold text-gray-700">Recent Activity</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                <tr>
+                  <th className="px-6 py-3">Time</th>
+                  <th className="px-6 py-3">Location</th>
+                  <th className="px-6 py-3">Game</th>
+                  <th className="px-6 py-3">Played</th>
+                  <th className="px-6 py-3">Payout</th>
+                  <th className="px-6 py-3 text-right">Net</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {records.map((r) => (
+                  <tr key={r.id} className="hover:bg-gray-50 transition">
+                    <td className="px-6 py-4 text-sm text-gray-400"><Clock size={14} className="inline mr-1" />{r.time}</td>
+                    <td className="px-6 py-4 font-medium text-gray-700"><MapPin size={14} className="inline mr-1 text-gray-400" />{r.location}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600"><Slot size={14} className="inline mr-1 text-gray-400" />{r.game}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">${r.played}</td>
+                    <td className="px-6 py-4 text-sm text-green-600 font-semibold">${r.payout}</td>
+                    <td className={`px-6 py-4 text-sm text-right font-bold ${(r.payout - r.played) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      { (r.payout - r.played) >= 0 ? '+' : '' }{r.payout - r.played}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+};
+
+export default SlotTrackerApp;
