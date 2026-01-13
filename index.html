@@ -14,29 +14,30 @@
     <!-- Babel for JSX parsing -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; }
+        .chart-container { position: relative; height: 300px; width: 100%; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
         
         const Icon = ({ name, size = 20, className = "" }) => {
             const icons = {
                 PlusCircle: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>,
-                TrendingUp: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
-                MapPin: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>,
                 Smartphone: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>,
                 History: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>,
                 LayoutDashboard: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>,
                 Trash2: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>,
-                DollarSign: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                MapPin: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>,
+                BarChart3: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
             };
             return icons[name] || null;
         };
@@ -47,17 +48,13 @@
             const MULTIPLIERS = ['1', '2', '3', '4', '5'];
 
             const [machines, setMachines] = useState(() => {
-                try {
-                    const saved = localStorage.getItem('slot_tracker_machines');
-                    return saved ? JSON.parse(saved) : [];
-                } catch (e) { return []; }
+                const saved = localStorage.getItem('slot_tracker_machines');
+                return saved ? JSON.parse(saved) : [];
             });
 
             const [records, setRecords] = useState(() => {
-                try {
-                    const saved = localStorage.getItem('slot_tracker_records');
-                    return saved ? JSON.parse(saved) : [];
-                } catch (e) { return []; }
+                const saved = localStorage.getItem('slot_tracker_records');
+                return saved ? JSON.parse(saved) : [];
             });
 
             const [activeTab, setActiveTab] = useState('dashboard');
@@ -72,10 +69,71 @@
                 payoutTime: new Date().toISOString().slice(0, 16)
             });
 
+            const chartRef = useRef(null);
+            const chartInstance = useRef(null);
+
             useEffect(() => {
                 localStorage.setItem('slot_tracker_machines', JSON.stringify(machines));
                 localStorage.setItem('slot_tracker_records', JSON.stringify(records));
             }, [machines, records]);
+
+            // Chart Rendering Logic
+            useEffect(() => {
+                if (activeTab === 'dashboard' && chartRef.current) {
+                    const ctx = chartRef.current.getContext('2d');
+                    
+                    // Aggregate jackpots per day
+                    const dayTotals = DAYS.map(day => {
+                        return records
+                            .filter(r => r.day === day)
+                            .reduce((sum, r) => sum + r.jackpot, 0);
+                    });
+
+                    if (chartInstance.current) {
+                        chartInstance.current.destroy();
+                    }
+
+                    chartInstance.current = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: DAYS,
+                            datasets: [{
+                                label: 'Total Jackpots ($)',
+                                data: dayTotals,
+                                backgroundColor: 'rgba(79, 70, 229, 0.8)',
+                                borderRadius: 8,
+                                borderSkipped: false,
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (context) => `$${context.parsed.y.toFixed(2)}`
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    grid: { color: '#F1F5F9' },
+                                    ticks: { font: { weight: 'bold' }, callback: (value) => '$' + value }
+                                },
+                                x: {
+                                    grid: { display: false },
+                                    ticks: { font: { weight: 'bold' } }
+                                }
+                            }
+                        }
+                    });
+                }
+                return () => {
+                    if (chartInstance.current) chartInstance.current.destroy();
+                };
+            }, [activeTab, records]);
 
             const addMachine = (e) => {
                 e.preventDefault();
@@ -86,7 +144,7 @@
             };
 
             const deleteMachine = (id) => {
-                if (window.confirm('Delete machine? Records remain but won\'t link to this ID.')) {
+                if (window.confirm('Delete machine?')) {
                     setMachines(machines.filter(m => m.id !== id));
                 }
             };
@@ -110,21 +168,17 @@
                     displayDate: payoutDate.toLocaleDateString()
                 };
                 setRecords([newRecord, ...records]);
-                setRecordForm({ 
-                    ...recordForm, 
-                    totalBet: '', 
-                    jackpot: '' 
-                });
+                setRecordForm({ ...recordForm, totalBet: '', jackpot: '' });
             };
 
             const deleteRecord = (id) => {
-                if (window.confirm('Delete this entry?')) {
+                if (window.confirm('Delete record?')) {
                     setRecords(records.filter(r => r.id !== id));
                 }
             };
 
             const clearAllRecords = () => {
-                if (window.confirm('WARNING: This will permanently delete ALL session records. Proceed?')) {
+                if (window.confirm('Permanently delete all session records?')) {
                     setRecords([]);
                 }
             };
@@ -189,56 +243,61 @@
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                                    <div className="lg:col-span-12">
-                                        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                                            <h2 className="text-xl font-black mb-6 flex items-center gap-2 text-slate-800">
-                                                <Icon name="PlusCircle" className="text-indigo-600" /> Log Session
-                                            </h2>
-                                            <form onSubmit={addRecord} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                <div className="space-y-1">
-                                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Machine</label>
-                                                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.machineId} onChange={(e) => setRecordForm({...recordForm, machineId: e.target.value})} required>
-                                                        <option value="">Choose Machine...</option>
-                                                        {machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                                    </select>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Day</label>
-                                                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.day} onChange={(e) => setRecordForm({...recordForm, day: e.target.value})}>
-                                                        {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
-                                                    </select>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Date/Time</label>
-                                                    <input type="datetime-local" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.payoutTime} onChange={(e) => setRecordForm({...recordForm, payoutTime: e.target.value})} />
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Total Bet ($)</label>
-                                                    <input type="number" step="0.01" placeholder="0.00" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.totalBet} onChange={(e) => setRecordForm({...recordForm, totalBet: e.target.value})} required />
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Denomination</label>
-                                                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.denom} onChange={(e) => setRecordForm({...recordForm, denom: e.target.value})}>
-                                                        {DENOMS.map(d => <option key={d} value={d}>{d}</option>)}
-                                                    </select>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Multiplier</label>
-                                                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.multiplier} onChange={(e) => setRecordForm({...recordForm, multiplier: e.target.value})}>
-                                                        {MULTIPLIERS.map(m => <option key={m} value={m}>{m}x</option>)}
-                                                    </select>
-                                                </div>
-                                                <div className="space-y-1 lg:col-span-2">
-                                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Jackpot ($)</label>
-                                                    <input type="number" step="0.01" placeholder="0.00" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.jackpot} onChange={(e) => setRecordForm({...recordForm, jackpot: e.target.value})} />
-                                                </div>
-                                                <div className="flex items-end">
-                                                    <button type="submit" className="w-full bg-indigo-600 text-white font-black py-3 rounded-xl shadow-lg hover:bg-indigo-700 transition active:scale-95">Save Record</button>
-                                                </div>
-                                            </form>
-                                        </div>
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                                    <h2 className="text-xl font-black mb-6 flex items-center gap-2 text-slate-800">
+                                        <Icon name="BarChart3" className="text-indigo-600" /> Jackpots by Day
+                                    </h2>
+                                    <div className="chart-container">
+                                        <canvas ref={chartRef}></canvas>
                                     </div>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                                    <h2 className="text-xl font-black mb-6 flex items-center gap-2 text-slate-800">
+                                        <Icon name="PlusCircle" className="text-indigo-600" /> Log Session
+                                    </h2>
+                                    <form onSubmit={addRecord} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Machine</label>
+                                            <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.machineId} onChange={(e) => setRecordForm({...recordForm, machineId: e.target.value})} required>
+                                                <option value="">Choose Machine...</option>
+                                                {machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Day</label>
+                                            <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.day} onChange={(e) => setRecordForm({...recordForm, day: e.target.value})}>
+                                                {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Date/Time</label>
+                                            <input type="datetime-local" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.payoutTime} onChange={(e) => setRecordForm({...recordForm, payoutTime: e.target.value})} />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Total Bet ($)</label>
+                                            <input type="number" step="0.01" placeholder="0.00" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.totalBet} onChange={(e) => setRecordForm({...recordForm, totalBet: e.target.value})} required />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Denomination</label>
+                                            <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.denom} onChange={(e) => setRecordForm({...recordForm, denom: e.target.value})}>
+                                                {DENOMS.map(d => <option key={d} value={d}>{d}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Multiplier</label>
+                                            <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.multiplier} onChange={(e) => setRecordForm({...recordForm, multiplier: e.target.value})}>
+                                                {MULTIPLIERS.map(m => <option key={m} value={m}>{m}x</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1 lg:col-span-2">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Jackpot ($)</label>
+                                            <input type="number" step="0.01" placeholder="0.00" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.jackpot} onChange={(e) => setRecordForm({...recordForm, jackpot: e.target.value})} />
+                                        </div>
+                                        <div className="flex items-end">
+                                            <button type="submit" className="w-full bg-indigo-600 text-white font-black py-3 rounded-xl shadow-lg hover:bg-indigo-700 transition active:scale-95">Save Record</button>
+                                        </div>
+                                    </form>
                                 </div>
                             </div>
                         )}
@@ -256,10 +315,8 @@
                                     </div>
                                 </div>
                                 <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {machines.length === 0 ? (
-                                        <div className="col-span-full py-12 text-center text-slate-400 font-bold">No machines registered yet.</div>
-                                    ) : machines.map(m => (
-                                        <div key={m.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex justify-between items-start hover:shadow-md transition duration-300">
+                                    {machines.map(m => (
+                                        <div key={m.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex justify-between items-start">
                                             <div>
                                                 <h3 className="font-black text-lg text-slate-800">{m.name}</h3>
                                                 <p className="text-slate-400 text-sm font-bold flex items-center gap-1 mt-1"><Icon name="MapPin" size={14}/> {m.location || 'No Location'}</p>
@@ -274,12 +331,7 @@
                         {activeTab === 'history' && (
                             <div className="space-y-4">
                                 <div className="flex justify-end">
-                                    <button 
-                                        onClick={clearAllRecords}
-                                        className="bg-rose-50 text-rose-600 px-4 py-2 rounded-xl text-xs font-black border border-rose-100 hover:bg-rose-100 transition"
-                                    >
-                                        Clear All History
-                                    </button>
+                                    <button onClick={clearAllRecords} className="bg-rose-50 text-rose-600 px-4 py-2 rounded-xl text-xs font-black border border-rose-100 hover:bg-rose-100 transition">Clear All History</button>
                                 </div>
                                 <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
                                     <div className="overflow-x-auto">
@@ -294,20 +346,15 @@
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50">
-                                                {records.length === 0 ? (
-                                                    <tr><td colSpan="5" className="px-6 py-12 text-center text-slate-400 font-bold">No history available.</td></tr>
-                                                ) : records.map(r => (
+                                                {records.map(r => (
                                                     <tr key={r.id} className="hover:bg-slate-50 transition">
                                                         <td className="px-6 py-4">
                                                             <div className="text-sm font-black text-slate-800">{r.day}</div>
-                                                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{r.displayDate} @ {r.displayTime}</div>
+                                                            <div className="text-[10px] text-slate-400 font-bold uppercase">{r.displayDate}</div>
                                                         </td>
+                                                        <td className="px-6 py-4 font-black text-slate-800">{r.machineName}</td>
                                                         <td className="px-6 py-4">
-                                                            <div className="text-sm font-black text-slate-800">{r.machineName}</div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="text-xs font-bold text-slate-600">D: {r.denom}</div>
-                                                            <div className="text-xs font-bold text-slate-600">M: {r.multiplier}x</div>
+                                                            <div className="text-xs font-bold text-slate-600">D: {r.denom} | M: {r.multiplier}x</div>
                                                         </td>
                                                         <td className="px-6 py-4 text-right">
                                                             <div className="text-[10px] font-bold text-slate-400">BET: ${r.totalBet.toFixed(2)}</div>
