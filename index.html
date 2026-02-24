@@ -40,7 +40,11 @@
                 Trash2: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>,
                 MapPin: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>,
                 BarChart3: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>,
-                Filter: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                Filter: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
+                Download: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>,
+                Pencil: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
+                Check: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 6 9 17 4 12"/></svg>,
+                X: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
             };
             return icons[name] || null;
         };
@@ -52,17 +56,23 @@
             const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4'];
 
             const [machines, setMachines] = useState(() => {
-                const saved = localStorage.getItem('slot_tracker_machines');
-                return saved ? JSON.parse(saved) : [];
+                try {
+                    const saved = localStorage.getItem('slot_tracker_machines');
+                    return saved ? JSON.parse(saved) : [];
+                } catch (e) { return []; }
             });
 
             const [records, setRecords] = useState(() => {
-                const saved = localStorage.getItem('slot_tracker_records');
-                return saved ? JSON.parse(saved) : [];
+                try {
+                    const saved = localStorage.getItem('slot_tracker_records');
+                    return saved ? JSON.parse(saved) : [];
+                } catch (e) { return []; }
             });
 
             const [activeTab, setActiveTab] = useState('dashboard');
             const [filterDate, setFilterDate] = useState('');
+            const [editingMachineId, setEditingMachineId] = useState(null);
+            const [editForm, setEditForm] = useState({ name: '', location: '' });
             
             const [machineForm, setMachineForm] = useState({ name: '', location: '' });
             const [recordForm, setRecordForm] = useState({ 
@@ -78,25 +88,38 @@
             const chartRef = useRef(null);
             const chartInstance = useRef(null);
 
+            // Persistent data logic
             useEffect(() => {
                 localStorage.setItem('slot_tracker_machines', JSON.stringify(machines));
-                localStorage.setItem('slot_tracker_records', JSON.stringify(records));
-            }, [machines, records]);
+            }, [machines]);
 
-            // Filtered records for stats and chart
-            const filteredRecords = useMemo(() => {
-                if (!filterDate) return records;
-                return records.filter(r => r.displayDateISO === filterDate);
+            useEffect(() => {
+                localStorage.setItem('slot_tracker_records', JSON.stringify(records));
+            }, [records]);
+
+            // Memoized sorted and filtered records (STRICT Newest First)
+            const processedRecords = useMemo(() => {
+                // Ensure a stable sort based on timestamp, fallback to creation order if timestamps are identical
+                let list = [...records].sort((a, b) => {
+                    if (b.timestamp !== a.timestamp) {
+                        return b.timestamp - a.timestamp;
+                    }
+                    // Secondary sort: if same minute, use the entry creation order (stored as createdOn)
+                    return (b.createdOn || 0) - (a.createdOn || 0);
+                });
+
+                if (filterDate) {
+                    list = list.filter(r => r.displayDateISO === filterDate);
+                }
+                return list;
             }, [records, filterDate]);
 
-            // Chart Rendering Logic
             useEffect(() => {
                 if (activeTab === 'dashboard' && chartRef.current) {
                     const ctx = chartRef.current.getContext('2d');
-                    
-                    // Group data by machine for line series
                     const datasets = machines.map((m, index) => {
-                        const machineData = filteredRecords
+                        // For charts, we sort OLD to NEW for time-series display
+                        const machineData = records
                             .filter(r => r.machineId === m.id)
                             .map(r => ({ x: r.timestamp, y: r.jackpot }))
                             .sort((a, b) => a.x - b.x);
@@ -158,19 +181,75 @@
                 return () => {
                     if (chartInstance.current) chartInstance.current.destroy();
                 };
-            }, [activeTab, filteredRecords, filterDate, machines]);
+            }, [activeTab, records, filterDate, machines]);
+
+            const exportToCSV = () => {
+                if (processedRecords.length === 0) return;
+                
+                const headers = ["Date", "Time", "Machine", "Day", "Denom", "Multiplier", "Total Bet", "Jackpot"];
+                const rows = processedRecords.map(r => [
+                    r.displayDate,
+                    r.displayTime,
+                    r.machineName,
+                    r.day,
+                    r.denom,
+                    r.multiplier,
+                    r.totalBet,
+                    r.jackpot
+                ]);
+
+                const csvContent = [
+                    headers.join(","),
+                    ...rows.map(row => `"${row.join('","')}"`)
+                ].join("\n");
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+                link.setAttribute("download", `SlotPro_Export_${new Date().toISOString().split('T')[0]}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
 
             const addMachine = (e) => {
                 e.preventDefault();
-                if (!machineForm.name) return;
-                const newMachine = { ...machineForm, id: self.crypto.randomUUID() };
-                setMachines([...machines, newMachine]);
+                if (!machineForm.name.trim()) return;
+                const newMachine = { 
+                    name: machineForm.name.trim(), 
+                    location: machineForm.location.trim(), 
+                    id: crypto.randomUUID() 
+                };
+                setMachines(prev => [...prev, newMachine]);
                 setMachineForm({ name: '', location: '' });
             };
 
+            const startEditing = (machine) => {
+                setEditingMachineId(machine.id);
+                setEditForm({ name: machine.name, location: machine.location });
+            };
+
+            const saveEdit = () => {
+                if (!editForm.name.trim()) return;
+                
+                setMachines(prev => prev.map(m => 
+                    m.id === editingMachineId ? { ...m, name: editForm.name.trim(), location: editForm.location.trim() } : m
+                ));
+
+                setRecords(prev => prev.map(r => 
+                    r.machineId === editingMachineId ? { ...r, machineName: editForm.name.trim() } : r
+                ));
+                
+                setEditingMachineId(null);
+            };
+
             const deleteMachine = (id) => {
-                if (window.confirm('Delete machine?')) {
-                    setMachines(machines.filter(m => m.id !== id));
+                if (window.confirm('Are you sure? This will delete the machine and ALL its historical session records.')) {
+                    setMachines(prev => prev.filter(m => m.id !== id));
+                    setRecords(prev => prev.filter(r => r.machineId !== id));
+                    if (editingMachineId === id) setEditingMachineId(null);
                 }
             };
 
@@ -179,8 +258,9 @@
                 if (!recordForm.machineId || !recordForm.totalBet) return;
                 const machine = machines.find(m => m.id === recordForm.machineId);
                 const payoutDate = new Date(recordForm.payoutTime);
+                
                 const newRecord = {
-                    id: self.crypto.randomUUID(),
+                    id: crypto.randomUUID(),
                     machineId: recordForm.machineId,
                     machineName: machine?.name || 'Unknown',
                     day: recordForm.day,
@@ -189,32 +269,36 @@
                     multiplier: recordForm.multiplier,
                     jackpot: parseFloat(recordForm.jackpot) || 0,
                     timestamp: payoutDate.getTime(),
+                    createdOn: Date.now(), // Tie-breaker for same-minute entries
                     displayTime: payoutDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                     displayDate: payoutDate.toLocaleDateString(),
-                    displayDateISO: payoutDate.toISOString().split('T')[0] // For filtering
+                    displayDateISO: payoutDate.toISOString().split('T')[0]
                 };
-                setRecords([newRecord, ...records]);
-                setRecordForm({ ...recordForm, totalBet: '', jackpot: '' });
+                
+                setRecords(prev => [newRecord, ...prev]);
+                // Keep the last machine selected but clear amounts
+                setRecordForm(prev => ({ ...prev, totalBet: '', jackpot: '' }));
             };
 
             const deleteRecord = (id) => {
-                if (window.confirm('Delete record?')) {
-                    setRecords(records.filter(r => r.id !== id));
+                if (window.confirm('Delete this specific record?')) {
+                    setRecords(prev => prev.filter(r => r.id !== id));
                 }
             };
 
             const clearAllRecords = () => {
-                if (window.confirm('Permanently delete all session records?')) {
+                if (window.confirm('Permanently delete all session records for all machines?')) {
                     setRecords([]);
                 }
             };
 
             const stats = useMemo(() => {
-                const totalPlayed = filteredRecords.reduce((acc, r) => acc + r.totalBet, 0);
-                const totalJackpots = filteredRecords.reduce((acc, r) => acc + r.jackpot, 0);
-                const avgJackpot = filteredRecords.length > 0 ? (totalJackpots / filteredRecords.length) : 0;
-                return { totalPlayed, totalJackpots, avgJackpot, totalEntries: filteredRecords.length };
-            }, [filteredRecords]);
+                const list = processedRecords;
+                const totalPlayed = list.reduce((acc, r) => acc + r.totalBet, 0);
+                const totalJackpots = list.reduce((acc, r) => acc + r.jackpot, 0);
+                const avgJackpot = list.length > 0 ? (totalJackpots / list.length) : 0;
+                return { totalPlayed, totalJackpots, avgJackpot, totalEntries: list.length };
+            }, [processedRecords]);
 
             return (
                 <div className="min-h-screen bg-[#F1F5F9] text-slate-900 pb-24 font-sans">
@@ -239,7 +323,7 @@
                                 <h1 className="text-3xl font-black text-slate-900 flex items-center gap-2">
                                     SlotPro <span className="bg-indigo-600 text-white text-xs px-2 py-1 rounded tracking-tighter">v2.0</span>
                                 </h1>
-                                <p className="text-slate-500 font-medium">Session Tracking</p>
+                                <p className="text-slate-500 font-medium tracking-tight">Session Performance Tracker</p>
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="hidden md:flex bg-white rounded-xl shadow-sm p-1 border border-slate-200 mr-2">
@@ -252,7 +336,6 @@
 
                         {activeTab === 'dashboard' && (
                             <div className="space-y-6">
-                                {/* Date Filter */}
                                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-4">
                                     <div className="flex items-center gap-2 text-slate-500">
                                         <Icon name="Filter" size={16} />
@@ -265,12 +348,7 @@
                                         onChange={(e) => setFilterDate(e.target.value)}
                                     />
                                     {filterDate && (
-                                        <button 
-                                            onClick={() => setFilterDate('')}
-                                            className="text-xs font-bold text-indigo-600 hover:underline"
-                                        >
-                                            Clear Filter
-                                        </button>
+                                        <button onClick={() => setFilterDate('')} className="text-xs font-bold text-indigo-600 hover:underline">Clear Filter</button>
                                     )}
                                 </div>
 
@@ -288,7 +366,7 @@
                                         <p className="text-3xl font-black text-indigo-600">${stats.avgJackpot.toFixed(2)}</p>
                                     </div>
                                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                                        <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Sessions</p>
+                                        <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Total Sessions</p>
                                         <p className="text-3xl font-black text-slate-800">{stats.totalEntries}</p>
                                     </div>
                                 </div>
@@ -309,48 +387,55 @@
                                     <h2 className="text-xl font-black mb-6 flex items-center gap-2 text-slate-800">
                                         <Icon name="PlusCircle" className="text-indigo-600" /> Log Session
                                     </h2>
-                                    <form onSubmit={addRecord} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Machine</label>
-                                            <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.machineId} onChange={(e) => setRecordForm({...recordForm, machineId: e.target.value})} required>
-                                                <option value="">Choose Machine...</option>
-                                                {machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                            </select>
+                                    {machines.length > 0 ? (
+                                        <form onSubmit={addRecord} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Machine</label>
+                                                <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.machineId} onChange={(e) => setRecordForm({...recordForm, machineId: e.target.value})} required>
+                                                    <option value="">Choose Machine...</option>
+                                                    {machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Day</label>
+                                                <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.day} onChange={(e) => setRecordForm({...recordForm, day: e.target.value})}>
+                                                    {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Date/Time</label>
+                                                <input type="datetime-local" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.payoutTime} onChange={(e) => setRecordForm({...recordForm, payoutTime: e.target.value})} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Total Bet ($)</label>
+                                                <input type="number" step="0.01" placeholder="0.00" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.totalBet} onChange={(e) => setRecordForm({...recordForm, totalBet: e.target.value})} required />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Denomination</label>
+                                                <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.denom} onChange={(e) => setRecordForm({...recordForm, denom: e.target.value})}>
+                                                    {DENOMS.map(d => <option key={d} value={d}>{d}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Multiplier</label>
+                                                <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.multiplier} onChange={(e) => setRecordForm({...recordForm, multiplier: e.target.value})}>
+                                                    {MULTIPLIERS.map(m => <option key={m} value={m}>{m}x</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="space-y-1 lg:col-span-2">
+                                                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Jackpot ($)</label>
+                                                <input type="number" step="0.01" placeholder="0.00" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.jackpot} onChange={(e) => setRecordForm({...recordForm, jackpot: e.target.value})} />
+                                            </div>
+                                            <div className="flex items-end">
+                                                <button type="submit" className="w-full bg-indigo-600 text-white font-black py-3 rounded-xl shadow-lg hover:bg-indigo-700 transition active:scale-95">Save Record</button>
+                                            </div>
+                                        </form>
+                                    ) : (
+                                        <div className="text-center py-8 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                                            <p className="text-slate-500 font-bold mb-4">You need to register a machine first!</p>
+                                            <button onClick={() => setActiveTab('machines')} className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-black shadow-md">Go to Machines</button>
                                         </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Day</label>
-                                            <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.day} onChange={(e) => setRecordForm({...recordForm, day: e.target.value})}>
-                                                {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Date/Time</label>
-                                            <input type="datetime-local" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.payoutTime} onChange={(e) => setRecordForm({...recordForm, payoutTime: e.target.value})} />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Total Bet ($)</label>
-                                            <input type="number" step="0.01" placeholder="0.00" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.totalBet} onChange={(e) => setRecordForm({...recordForm, totalBet: e.target.value})} required />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Denomination</label>
-                                            <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.denom} onChange={(e) => setRecordForm({...recordForm, denom: e.target.value})}>
-                                                {DENOMS.map(d => <option key={d} value={d}>{d}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Multiplier</label>
-                                            <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.multiplier} onChange={(e) => setRecordForm({...recordForm, multiplier: e.target.value})}>
-                                                {MULTIPLIERS.map(m => <option key={m} value={m}>{m}x</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="space-y-1 lg:col-span-2">
-                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Jackpot ($)</label>
-                                            <input type="number" step="0.01" placeholder="0.00" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none" value={recordForm.jackpot} onChange={(e) => setRecordForm({...recordForm, jackpot: e.target.value})} />
-                                        </div>
-                                        <div className="flex items-end">
-                                            <button type="submit" className="w-full bg-indigo-600 text-white font-black py-3 rounded-xl shadow-lg hover:bg-indigo-700 transition active:scale-95">Save Record</button>
-                                        </div>
-                                    </form>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -358,32 +443,87 @@
                         {activeTab === 'machines' && (
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                                 <div className="lg:col-span-4">
-                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                                        <h2 className="text-xl font-black mb-6 text-slate-800">Create Machine</h2>
+                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 sticky top-8">
+                                        <h2 className="text-xl font-black mb-6 text-slate-800">Add New Machine</h2>
                                         <form onSubmit={addMachine} className="space-y-4">
                                             <input placeholder="Machine Name" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none" value={machineForm.name} onChange={e => setMachineForm({...machineForm, name: e.target.value})} required />
                                             <input placeholder="Location" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none" value={machineForm.location} onChange={e => setMachineForm({...machineForm, location: e.target.value})} />
-                                            <button className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-black transition">Register</button>
+                                            <button className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-black transition active:scale-95">Register Machine</button>
                                         </form>
                                     </div>
                                 </div>
-                                <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4 content-start">
                                     {machines.map(m => (
-                                        <div key={m.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex justify-between items-start">
-                                            <div>
-                                                <h3 className="font-black text-lg text-slate-800">{m.name}</h3>
-                                                <p className="text-slate-400 text-sm font-bold flex items-center gap-1 mt-1"><Icon name="MapPin" size={14}/> {m.location || 'No Location'}</p>
-                                            </div>
-                                            <button onClick={() => deleteMachine(m.id)} className="text-slate-200 hover:text-rose-500 transition"><Icon name="Trash2" /></button>
+                                        <div key={m.id} className="bg-white p-6 rounded-3xl border border-slate-200 group h-fit">
+                                            {editingMachineId === m.id ? (
+                                                <div className="space-y-3">
+                                                    <input 
+                                                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold"
+                                                        value={editForm.name}
+                                                        onChange={e => setEditForm({...editForm, name: e.target.value})}
+                                                        autoFocus
+                                                    />
+                                                    <input 
+                                                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold"
+                                                        value={editForm.location}
+                                                        onChange={e => setEditForm({...editForm, location: e.target.value})}
+                                                    />
+                                                    <div className="flex gap-2 pt-1">
+                                                        <button onClick={saveEdit} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-xs font-black flex items-center justify-center gap-1 active:scale-95">
+                                                            <Icon name="Check" size={14} /> Save
+                                                        </button>
+                                                        <button onClick={() => setEditingMachineId(null)} className="flex-1 bg-slate-200 text-slate-600 py-2 rounded-lg text-xs font-black flex items-center justify-center gap-1 active:scale-95">
+                                                            <Icon name="X" size={14} /> Cancel
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex justify-between items-start">
+                                                    <div className="overflow-hidden">
+                                                        <h3 className="font-black text-lg text-slate-800 truncate">{m.name}</h3>
+                                                        <p className="text-slate-400 text-sm font-bold flex items-center gap-1 mt-1 truncate">
+                                                            <Icon name="MapPin" size={14}/> {m.location || 'No Location'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex gap-3 ml-4 flex-shrink-0">
+                                                        <button 
+                                                            onClick={() => startEditing(m)} 
+                                                            className="text-slate-300 hover:text-indigo-600 transition"
+                                                            title="Edit Machine"
+                                                        >
+                                                            <Icon name="Pencil" size={18} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => deleteMachine(m.id)} 
+                                                            className="text-slate-300 hover:text-rose-500 transition"
+                                                            title="Delete Machine"
+                                                        >
+                                                            <Icon name="Trash2" size={18} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
+                                    {machines.length === 0 && (
+                                        <div className="col-span-full py-12 text-center text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-3xl">
+                                            No machines registered yet.
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
 
                         {activeTab === 'history' && (
                             <div className="space-y-4">
-                                <div className="flex justify-end">
+                                <div className="flex justify-between items-center">
+                                    <button 
+                                        onClick={exportToCSV}
+                                        disabled={processedRecords.length === 0}
+                                        className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-black border border-indigo-100 hover:bg-indigo-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <Icon name="Download" size={14} /> Export CSV
+                                    </button>
                                     <button onClick={clearAllRecords} className="bg-rose-50 text-rose-600 px-4 py-2 rounded-xl text-xs font-black border border-rose-100 hover:bg-rose-100 transition">Clear All History</button>
                                 </div>
                                 <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
@@ -391,33 +531,42 @@
                                         <table className="w-full">
                                             <thead className="bg-slate-50 border-b border-slate-100">
                                                 <tr>
-                                                    <th className="text-left px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Session</th>
+                                                    <th className="text-left px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Session Time</th>
                                                     <th className="text-left px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Machine</th>
                                                     <th className="text-left px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Config</th>
-                                                    <th className="text-right px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Bet/Jackpot</th>
+                                                    <th className="text-right px-6 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">Bet / Jackpot</th>
                                                     <th className="px-6 py-5"></th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50">
-                                                {records.map(r => (
+                                                {processedRecords.map(r => (
                                                     <tr key={r.id} className="hover:bg-slate-50 transition">
                                                         <td className="px-6 py-4">
                                                             <div className="text-sm font-black text-slate-800">{r.day}</div>
                                                             <div className="text-[10px] text-slate-400 font-bold uppercase">{r.displayDate} @ {r.displayTime}</div>
                                                         </td>
-                                                        <td className="px-6 py-4 font-black text-slate-800">{r.machineName}</td>
                                                         <td className="px-6 py-4">
-                                                            <div className="text-xs font-bold text-slate-600">D: {r.denom} | M: {r.multiplier}x</div>
+                                                            <div className="font-black text-slate-800 text-sm truncate max-w-[120px]" title={r.machineName}>{r.machineName}</div>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="text-xs font-bold text-slate-500">D: {r.denom} | M: {r.multiplier}x</div>
                                                         </td>
                                                         <td className="px-6 py-4 text-right">
-                                                            <div className="text-[10px] font-bold text-slate-400">BET: ${r.totalBet.toFixed(2)}</div>
-                                                            <div className="text-sm font-black text-emerald-500">JACKPOT: ${r.jackpot.toFixed(2)}</div>
+                                                            <div className="text-[10px] font-bold text-slate-400 uppercase">Bet: ${r.totalBet.toFixed(2)}</div>
+                                                            <div className="text-sm font-black text-emerald-600">Win: ${r.jackpot.toFixed(2)}</div>
                                                         </td>
                                                         <td className="px-6 py-4 text-right">
-                                                            <button onClick={() => deleteRecord(r.id)} className="text-slate-200 hover:text-rose-500 transition"><Icon name="Trash2" size={18} /></button>
+                                                            <button onClick={() => deleteRecord(r.id)} className="text-slate-200 hover:text-rose-500 transition active:scale-90"><Icon name="Trash2" size={18} /></button>
                                                         </td>
                                                     </tr>
                                                 ))}
+                                                {processedRecords.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan="5" className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                                                            No history available
+                                                        </td>
+                                                    </tr>
+                                                )}
                                             </tbody>
                                         </table>
                                     </div>
