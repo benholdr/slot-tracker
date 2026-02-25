@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SlotPro v2.2 - Machine Tracker</title>
+    <title>SlotPro v2.4 - Machine Tracker</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -23,7 +23,6 @@
         .chart-container { position: relative; height: 350px; width: 100%; }
         input[type="datetime-local"] { min-height: 44px; }
         
-        /* Custom scrollbar for table */
         .custom-scrollbar::-webkit-scrollbar { height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
@@ -46,6 +45,7 @@
                 ArrowUp: <svg xmlns="http://www.w3.org/2000/svg" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m5 15 7-7 7 7"/></svg>,
                 ArrowDown: <svg xmlns="http://www.w3.org/2000/svg" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m19 9-7 7-7-7"/></svg>,
                 Download: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>,
+                Upload: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>,
                 Edit: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
                 X: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
                 BarChart: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
@@ -62,7 +62,6 @@
             });
             const DENOMS = ['.01', '.02', '.05', '.1', '.25', '.5', '1.00'];
             const MULTIPLIERS = ['1', '2', '3', '4', '5'];
-            const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4'];
 
             const [machines, setMachines] = useState(() => {
                 const saved = localStorage.getItem('slot_tracker_machines');
@@ -75,12 +74,16 @@
             });
 
             const [activeTab, setActiveTab] = useState('dashboard');
-            const [graphMode, setGraphMode] = useState('date'); // 'date', 'time', 'day'
+            const [graphMode, setGraphMode] = useState('date');
             const [sortConfig, setSortConfig] = useState({ key: 'timestamp', direction: 'desc' });
             
             const [machineForm, setMachineForm] = useState({ name: '', location: '' });
             const [editingMachine, setEditingMachine] = useState(null);
             
+            const fileInputRef = useRef(null);
+            const chartRef = useRef(null);
+            const chartInstance = useRef(null);
+
             const getInitialDateTime = () => {
                 const now = new Date();
                 now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -95,9 +98,6 @@
                 jackpot: '',
                 payoutDateTime: getInitialDateTime()
             });
-
-            const chartRef = useRef(null);
-            const chartInstance = useRef(null);
 
             useEffect(() => {
                 localStorage.setItem('slot_tracker_machines', JSON.stringify(machines));
@@ -125,6 +125,9 @@
                         } else if (sortConfig.key === 'denom') {
                             aVal = parseFloat(aVal.replace('.', '0.'));
                             bVal = parseFloat(bVal.replace('.', '0.'));
+                        } else if (typeof aVal === 'string') {
+                            aVal = aVal.toLowerCase();
+                            bVal = bVal.toLowerCase();
                         }
 
                         if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -135,18 +138,15 @@
                 return items;
             }, [records, sortConfig]);
 
-            // Chart Rendering Logic
             useEffect(() => {
                 if (activeTab === 'dashboard' && chartRef.current && records.length > 0) {
                     const ctx = chartRef.current.getContext('2d');
-                    
                     let labels = [];
                     let dataPoints = [];
                     let label = "";
                     let type = "line";
 
                     if (graphMode === 'date') {
-                        // Group by unique dates
                         const grouped = records.reduce((acc, r) => {
                             acc[r.displayDate] = (acc[r.displayDate] || 0) + r.jackpot;
                             return acc;
@@ -154,19 +154,16 @@
                         labels = Object.keys(grouped).sort((a,b) => new Date(a) - new Date(b));
                         dataPoints = labels.map(l => grouped[l]);
                         label = "Jackpots by Date ($)";
-                        type = "line";
                     } else if (graphMode === 'day') {
-                        // Group by day of week
                         labels = DAYS;
                         const grouped = records.reduce((acc, r) => {
                             acc[r.day] = (acc[r.day] || 0) + r.jackpot;
                             return acc;
                         }, {});
                         dataPoints = labels.map(l => grouped[l] || 0);
-                        label = "Jackpots by Day of Week ($)";
+                        label = "Jackpots by Day ($)";
                         type = "bar";
                     } else if (graphMode === 'time') {
-                        // Group by hour
                         labels = HOURS;
                         const grouped = records.reduce((acc, r) => {
                             const hour = new Date(r.timestamp).getHours();
@@ -197,15 +194,9 @@
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
-                            plugins: {
-                                legend: { display: false }
-                            },
+                            plugins: { legend: { display: false } },
                             scales: {
-                                y: { 
-                                    beginAtZero: true,
-                                    grid: { color: '#f1f5f9' },
-                                    ticks: { callback: (val) => '$' + val }
-                                },
+                                y: { beginAtZero: true, ticks: { callback: (v) => '$' + v } },
                                 x: { grid: { display: false } }
                             }
                         }
@@ -222,11 +213,8 @@
 
             const updateMachine = (e) => {
                 e.preventDefault();
-                if (!editingMachine.name) return;
                 const updatedMachines = machines.map(m => m.id === editingMachine.id ? editingMachine : m);
                 setMachines(updatedMachines);
-                const updatedRecords = records.map(r => r.machineId === editingMachine.id ? { ...r, machineName: editingMachine.name } : r);
-                setRecords(updatedRecords);
                 setEditingMachine(null);
             };
 
@@ -239,19 +227,19 @@
                 if (!recordForm.machineId || !recordForm.totalBet) return;
                 const machine = machines.find(m => m.id === recordForm.machineId);
                 const combinedDT = new Date(recordForm.payoutDateTime);
-                const timeOnlyValue = (combinedDT.getHours() * 3600) + (combinedDT.getMinutes() * 60) + combinedDT.getSeconds();
-
+                
                 const newRecord = {
                     id: self.crypto.randomUUID(),
                     machineId: recordForm.machineId,
                     machineName: machine?.name || 'Unknown',
+                    machineLocation: machine?.location || 'Unknown',
                     day: DAYS[combinedDT.getDay()],
                     totalBet: parseFloat(recordForm.totalBet) || 0,
                     denom: recordForm.denom,
                     multiplier: recordForm.multiplier,
                     jackpot: parseFloat(recordForm.jackpot) || 0,
                     timestamp: combinedDT.getTime(),
-                    timeOnlyValue: timeOnlyValue,
+                    timeOnlyValue: (combinedDT.getHours() * 3600) + (combinedDT.getMinutes() * 60),
                     displayTime: combinedDT.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
                     displayDate: combinedDT.toLocaleDateString()
                 };
@@ -260,27 +248,88 @@
             };
 
             const exportHistory = () => {
-                if (records.length === 0) return;
-                const headers = ['Machine', 'Day', 'Date', 'Time', 'Total Bet', 'Denom', 'Multiplier', 'Jackpot'];
-                const rows = records.map(r => [r.machineName, r.day, r.displayDate, r.displayTime, r.totalBet, r.denom, r.multiplier, r.jackpot]);
-                const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
+                const headers = ['Machine', 'Location', 'Day', 'Date', 'Time', 'Total Bet', 'Denom', 'Multiplier', 'Jackpot'];
+                const rows = records.map(r => [r.machineName, r.machineLocation, r.day, r.displayDate, r.displayTime, r.totalBet, r.denom, r.multiplier, r.jackpot]);
+                const csvContent = [headers, ...rows].map(e => e.map(val => `"${val}"`).join(",")).join("\n");
                 const link = document.createElement("a");
-                link.setAttribute("href", url);
-                link.setAttribute("download", `slotpro_history.csv`);
+                link.setAttribute("href", URL.createObjectURL(new Blob([csvContent], { type: 'text/csv' })));
+                link.setAttribute("download", `slotpro_export_${new Date().getTime()}.csv`);
                 link.click();
             };
 
-            const clearAllRecords = () => {
-                if (window.confirm('Clear all session history?')) setRecords([]);
+            const handleImport = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const csvData = event.target.result;
+                    const lines = csvData.split(/\r?\n/);
+                    if (lines.length < 2) return;
+
+                    const newRecords = [];
+                    for (let i = 1; i < lines.length; i++) {
+                        if (!lines[i].trim()) continue;
+                        const cols = lines[i].match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)?.map(c => c.replace(/^"|"$/g, '')) || [];
+                        if (cols.length < 9) continue;
+
+                        const [machineName, machineLocation, day, date, time, totalBet, denom, multiplier, jackpot] = cols;
+                        const dateParts = date.split('/');
+                        const timeParts = time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+                        
+                        let timestamp = Date.now();
+                        if (dateParts.length === 3 && timeParts) {
+                            let hours = parseInt(timeParts[1]);
+                            const minutes = parseInt(timeParts[2]);
+                            const ampm = timeParts[3].toUpperCase();
+                            if (ampm === 'PM' && hours < 12) hours += 12;
+                            if (ampm === 'AM' && hours === 12) hours = 0;
+                            const dt = new Date(dateParts[2], dateParts[0]-1, dateParts[1], hours, minutes);
+                            timestamp = dt.getTime();
+                        }
+
+                        newRecords.push({
+                            id: self.crypto.randomUUID(),
+                            machineId: 'imported',
+                            machineName,
+                            machineLocation,
+                            day,
+                            totalBet: parseFloat(totalBet) || 0,
+                            denom,
+                            multiplier,
+                            jackpot: parseFloat(jackpot) || 0,
+                            timestamp,
+                            timeOnlyValue: (new Date(timestamp).getHours() * 3600) + (new Date(timestamp).getMinutes() * 60),
+                            displayTime: time,
+                            displayDate: date
+                        });
+                    }
+
+                    if (newRecords.length > 0) {
+                        if (window.confirm(`Import ${newRecords.length} records? This will merge with existing data.`)) {
+                            setRecords(prev => [...newRecords, ...prev]);
+                        }
+                    }
+                    e.target.value = null;
+                };
+                reader.readAsText(file);
             };
 
-            const stats = useMemo(() => {
-                const totalPlayed = records.reduce((acc, r) => acc + r.totalBet, 0);
-                const totalJackpots = records.reduce((acc, r) => acc + r.jackpot, 0);
-                return { totalPlayed, totalJackpots, avgJackpot: records.length ? totalJackpots / records.length : 0, totalEntries: records.length };
-            }, [records]);
+            const clearAllData = () => {
+                if (window.confirm("⚠️ WARNING: This will permanently delete ALL session records and machines. This cannot be undone. Are you sure?")) {
+                    setRecords([]);
+                    setMachines([]);
+                    localStorage.removeItem('slot_tracker_machines');
+                    localStorage.removeItem('slot_tracker_records');
+                }
+            };
+
+            const stats = useMemo(() => ({
+                totalPlayed: records.reduce((acc, r) => acc + r.totalBet, 0),
+                totalJackpots: records.reduce((acc, r) => acc + r.jackpot, 0),
+                avgJackpot: records.length ? records.reduce((acc, r) => acc + r.jackpot, 0) / records.length : 0,
+                totalEntries: records.length
+            }), [records]);
 
             const SortHeader = ({ label, sortKey }) => (
                 <th className="px-4 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-indigo-600 transition group select-none" onClick={() => requestSort(sortKey)}>
@@ -297,143 +346,101 @@
                 <div className="min-h-screen bg-[#F1F5F9] text-slate-900 pb-24 font-sans">
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-40 md:hidden shadow-lg">
                         <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center ${activeTab === 'dashboard' ? 'text-indigo-600' : 'text-slate-400'}`}>
-                            <Icon name="LayoutDashboard" size={20} />
-                            <span className="text-[10px] mt-1 font-bold">Stats</span>
+                            <Icon name="LayoutDashboard" size={20} /><span className="text-[10px] mt-1 font-bold">Stats</span>
                         </button>
                         <button onClick={() => setActiveTab('machines')} className={`flex flex-col items-center ${activeTab === 'machines' ? 'text-indigo-600' : 'text-slate-400'}`}>
-                            <Icon name="Smartphone" size={20} />
-                            <span className="text-[10px] mt-1 font-bold">Machines</span>
+                            <Icon name="Smartphone" size={20} /><span className="text-[10px] mt-1 font-bold">Machines</span>
                         </button>
                         <button onClick={() => setActiveTab('history')} className={`flex flex-col items-center ${activeTab === 'history' ? 'text-indigo-600' : 'text-slate-400'}`}>
-                            <Icon name="History" size={20} />
-                            <span className="text-[10px] mt-1 font-bold">History</span>
+                            <Icon name="History" size={20} /><span className="text-[10px] mt-1 font-bold">History</span>
                         </button>
                     </nav>
 
                     {editingMachine && (
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-                            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-xl font-black text-slate-800">Edit Machine</h2>
-                                    <button onClick={() => setEditingMachine(null)} className="text-slate-400 hover:text-slate-600"><Icon name="X" /></button>
+                            <div className="bg-white w-full max-w-md rounded-3xl p-8">
+                                <div className="flex justify-between mb-6">
+                                    <h2 className="text-xl font-black">Edit Machine</h2>
+                                    <button onClick={() => setEditingMachine(null)}><Icon name="X" /></button>
                                 </div>
                                 <form onSubmit={updateMachine} className="space-y-4">
-                                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold" value={editingMachine.name} onChange={e => setEditingMachine({...editingMachine, name: e.target.value})} required />
-                                    <input className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold" value={editingMachine.location} onChange={e => setEditingMachine({...editingMachine, location: e.target.value})} />
-                                    <button className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl shadow-lg mt-2">Save Changes</button>
+                                    <input className="w-full bg-slate-50 border rounded-xl px-4 py-3 font-bold" value={editingMachine.name} onChange={e => setEditingMachine({...editingMachine, name: e.target.value})} placeholder="Name" required />
+                                    <input className="w-full bg-slate-50 border rounded-xl px-4 py-3 font-bold" value={editingMachine.location} onChange={e => setEditingMachine({...editingMachine, location: e.target.value})} placeholder="Location" />
+                                    <button className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl shadow-lg">Save</button>
                                 </form>
                             </div>
                         </div>
                     )}
 
                     <div className="max-w-6xl mx-auto p-4 md:p-8">
-                        <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-8 gap-4">
+                        <header className="flex flex-col md:flex-row md:justify-between md:items-end mb-8 gap-4">
                             <div>
-                                <h1 className="text-3xl font-black text-slate-900 flex items-center gap-2">SlotPro <span className="bg-indigo-600 text-white text-xs px-2 py-1 rounded tracking-tighter">v2.2</span></h1>
-                                <p className="text-slate-500 font-medium tracking-tight">Advanced Session Tracking</p>
+                                <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter">SlotPro <span className="bg-indigo-600 text-white text-xs px-2 py-1 rounded not-italic tracking-normal">v2.4</span></h1>
+                                <p className="text-slate-500 font-medium">Advanced Performance Tracker</p>
                             </div>
-                            <div className="hidden md:flex bg-white rounded-xl shadow-sm p-1 border border-slate-200">
+                            <div className="hidden md:flex bg-white rounded-xl shadow-sm p-1 border">
                                 {['dashboard', 'machines', 'history'].map(tab => (
-                                    <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>{tab}</button>
+                                    <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 rounded-lg text-sm font-bold capitalize ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>{tab}</button>
                                 ))}
                             </div>
-                        </div>
+                        </header>
 
                         {activeTab === 'dashboard' && (
                             <div className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Total Bets</p>
-                                        <p className="text-3xl font-black text-slate-800">${stats.totalPlayed.toFixed(2)}</p>
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div className="bg-white p-6 rounded-3xl border border-slate-200">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Bets</p>
+                                        <p className="text-3xl font-black">${stats.totalPlayed.toFixed(2)}</p>
                                     </div>
-                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Total Jackpots</p>
+                                    <div className="bg-white p-6 rounded-3xl border border-slate-200">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Jackpots</p>
                                         <p className="text-3xl font-black text-emerald-500">${stats.totalJackpots.toFixed(2)}</p>
                                     </div>
-                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 text-indigo-600">
-                                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Avg Jackpot</p>
-                                        <p className="text-3xl font-black">${stats.avgJackpot.toFixed(2)}</p>
+                                    <div className="bg-white p-6 rounded-3xl border border-slate-200">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Avg Hit</p>
+                                        <p className="text-3xl font-black text-indigo-600">${stats.avgJackpot.toFixed(2)}</p>
                                     </div>
-                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Sessions</p>
-                                        <p className="text-3xl font-black text-slate-800">{stats.totalEntries}</p>
+                                    <div className="bg-white p-6 rounded-3xl border border-slate-200">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sessions</p>
+                                        <p className="text-3xl font-black">{stats.totalEntries}</p>
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                                    {/* Left Column: Form */}
-                                    <div className="lg:col-span-5 bg-white p-6 rounded-3xl shadow-sm border border-slate-200 h-fit">
-                                        <h2 className="text-xl font-black mb-6 flex items-center gap-2 text-slate-800">
-                                            <Icon name="PlusCircle" className="text-indigo-600" /> Log Session
-                                        </h2>
-                                        <form onSubmit={addRecord} className="grid grid-cols-1 gap-4">
-                                            <div className="space-y-1">
-                                                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Machine</label>
-                                                <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none" value={recordForm.machineId} onChange={(e) => setRecordForm({...recordForm, machineId: e.target.value})} required>
-                                                    <option value="">Choose Machine...</option>
-                                                    {machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                    <div className="lg:col-span-5 bg-white p-6 rounded-3xl border">
+                                        <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Icon name="PlusCircle" className="text-indigo-600" /> Log Session</h2>
+                                        <form onSubmit={addRecord} className="grid gap-4">
+                                            <select className="w-full bg-slate-50 border rounded-xl px-4 py-3 font-bold" value={recordForm.machineId} onChange={(e) => setRecordForm({...recordForm, machineId: e.target.value})} required>
+                                                <option value="">Choose Machine...</option>
+                                                {machines.map(m => <option key={m.id} value={m.id}>{m.name} ({m.location})</option>)}
+                                            </select>
+                                            <input type="datetime-local" className="w-full bg-slate-50 border rounded-xl px-4 py-3 font-bold" value={recordForm.payoutDateTime} onChange={(e) => setRecordForm({...recordForm, payoutDateTime: e.target.value})} />
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <input type="number" step="0.01" className="w-full bg-slate-50 border rounded-xl px-4 py-3 font-bold" value={recordForm.totalBet} onChange={(e) => setRecordForm({...recordForm, totalBet: e.target.value})} placeholder="Bet $" required />
+                                                <input type="number" step="0.01" className="w-full bg-slate-50 border rounded-xl px-4 py-3 font-bold" value={recordForm.jackpot} onChange={(e) => setRecordForm({...recordForm, jackpot: e.target.value})} placeholder="Jackpot $" required />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <select className="bg-slate-50 border rounded-xl px-4 py-3 font-bold" value={recordForm.denom} onChange={(e) => setRecordForm({...recordForm, denom: e.target.value})}>
+                                                    {DENOMS.map(d => <option key={d} value={d}>{d}</option>)}
+                                                </select>
+                                                <select className="bg-slate-50 border rounded-xl px-4 py-3 font-bold" value={recordForm.multiplier} onChange={(e) => setRecordForm({...recordForm, multiplier: e.target.value})}>
+                                                    {MULTIPLIERS.map(m => <option key={m} value={m}>{m}x</option>)}
                                                 </select>
                                             </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Date & Time</label>
-                                                <input type="datetime-local" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none" value={recordForm.payoutDateTime} onChange={(e) => setRecordForm({...recordForm, payoutDateTime: e.target.value})} />
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="space-y-1">
-                                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Total Bet ($)</label>
-                                                    <input type="number" step="0.01" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none" value={recordForm.totalBet} onChange={(e) => setRecordForm({...recordForm, totalBet: e.target.value})} required />
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Jackpot ($)</label>
-                                                    <input type="number" step="0.01" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none" value={recordForm.jackpot} onChange={(e) => setRecordForm({...recordForm, jackpot: e.target.value})} required />
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="space-y-1">
-                                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Denom</label>
-                                                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none" value={recordForm.denom} onChange={(e) => setRecordForm({...recordForm, denom: e.target.value})}>
-                                                        {DENOMS.map(d => <option key={d} value={d}>{d}</option>)}
-                                                    </select>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Multi</label>
-                                                    <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none" value={recordForm.multiplier} onChange={(e) => setRecordForm({...recordForm, multiplier: e.target.value})}>
-                                                        {MULTIPLIERS.map(m => <option key={m} value={m}>{m}x</option>)}
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <button type="submit" className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-indigo-700 transition mt-2">Save Record</button>
+                                            <button className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl shadow-lg mt-2 transition active:scale-[0.98]">Save Record</button>
                                         </form>
                                     </div>
-
-                                    {/* Right Column: Visualization */}
-                                    <div className="lg:col-span-7 bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                                            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                                                <Icon name="BarChart" className="text-indigo-600" /> Jackpot Trends
-                                            </h2>
+                                    <div className="lg:col-span-7 bg-white p-6 rounded-3xl border">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h2 className="text-xl font-black">Performance</h2>
                                             <div className="bg-slate-100 p-1 rounded-xl flex gap-1">
-                                                {['date', 'time', 'day'].map(mode => (
-                                                    <button 
-                                                        key={mode} 
-                                                        onClick={() => setGraphMode(mode)}
-                                                        className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-tighter rounded-lg transition ${graphMode === mode ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
-                                                    >
-                                                        {mode}
-                                                    </button>
+                                                {['date', 'time', 'day'].map(m => (
+                                                    <button key={m} onClick={() => setGraphMode(m)} className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-lg ${graphMode === m ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>{m}</button>
                                                 ))}
                                             </div>
                                         </div>
-                                        
                                         <div className="chart-container">
-                                            {records.length > 0 ? (
-                                                <canvas ref={chartRef}></canvas>
-                                            ) : (
-                                                <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-2 border-2 border-dashed border-slate-50 rounded-2xl">
-                                                    <Icon name="BarChart" size={40} />
-                                                    <p className="font-bold text-sm">Add data to see visual trends</p>
-                                                </div>
-                                            )}
+                                            {records.length > 0 ? <canvas ref={chartRef}></canvas> : <div className="h-full flex items-center justify-center text-slate-300 font-bold">No data available</div>}
                                         </div>
                                     </div>
                                 </div>
@@ -443,66 +450,72 @@
                         {activeTab === 'machines' && (
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                                 <div className="lg:col-span-4">
-                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                                        <h2 className="text-xl font-black mb-6 text-slate-800">Add Machine</h2>
+                                    <div className="bg-white p-6 rounded-3xl border">
+                                        <h2 className="text-xl font-black mb-6">Add Machine</h2>
                                         <form onSubmit={addMachine} className="space-y-4">
-                                            <input placeholder="Machine Name" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none" value={machineForm.name} onChange={e => setMachineForm({...machineForm, name: e.target.value})} required />
-                                            <input placeholder="Floor Location" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none" value={machineForm.location} onChange={e => setMachineForm({...machineForm, location: e.target.value})} />
-                                            <button className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-black transition">Create Machine</button>
+                                            <input placeholder="Name (e.g. Buffalo #4)" className="w-full bg-slate-50 border rounded-xl px-4 py-3 font-bold" value={machineForm.name} onChange={e => setMachineForm({...machineForm, name: e.target.value})} required />
+                                            <input placeholder="Floor (e.g. High Limit)" className="w-full bg-slate-50 border rounded-xl px-4 py-3 font-bold" value={machineForm.location} onChange={e => setMachineForm({...machineForm, location: e.target.value})} />
+                                            <button className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl">Create</button>
                                         </form>
                                     </div>
                                 </div>
                                 <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {machines.map(m => (
-                                        <div key={m.id} className="bg-white p-6 rounded-3xl border border-slate-200 flex justify-between items-start group">
+                                        <div key={m.id} className="bg-white p-6 rounded-3xl border flex justify-between items-start hover:border-indigo-200 transition">
                                             <div>
-                                                <h3 className="font-black text-lg text-slate-800">{m.name}</h3>
-                                                <p className="text-slate-400 text-xs font-bold flex items-center gap-1 mt-1 uppercase tracking-tighter"><Icon name="MapPin" size={14}/> {m.location || 'Unknown Floor'}</p>
+                                                <h3 className="font-black text-lg">{m.name}</h3>
+                                                <p className="text-slate-400 text-xs font-bold uppercase flex items-center gap-1 mt-1"><Icon name="MapPin" size={12}/> {m.location || 'N/A'}</p>
                                             </div>
-                                            <div className="flex gap-2">
-                                                <button onClick={() => setEditingMachine(m)} className="text-slate-200 hover:text-indigo-600 transition"><Icon name="Edit" size={18} /></button>
-                                                <button onClick={() => deleteMachine(m.id)} className="text-slate-200 hover:text-rose-500 transition"><Icon name="Trash2" size={18} /></button>
+                                            <div className="flex gap-2 text-slate-200">
+                                                <button onClick={() => setEditingMachine(m)} className="hover:text-indigo-600"><Icon name="Edit" size={18} /></button>
+                                                <button onClick={() => deleteMachine(m.id)} className="hover:text-rose-500"><Icon name="Trash2" size={18} /></button>
                                             </div>
                                         </div>
                                     ))}
-                                    {machines.length === 0 && (
-                                        <div className="col-span-full py-12 text-center text-slate-300 font-bold border-2 border-dashed border-slate-200 rounded-3xl">No machines registered.</div>
-                                    )}
+                                    {machines.length === 0 && <div className="col-span-full py-12 text-center text-slate-300 font-black italic">NO MACHINES FOUND</div>}
                                 </div>
                             </div>
                         )}
 
                         {activeTab === 'history' && (
                             <div className="space-y-4">
-                                <div className="flex justify-between items-center">
-                                    <h2 className="text-xl font-black text-slate-800">Session History</h2>
-                                    <div className="flex gap-2">
-                                        <button onClick={exportHistory} className="bg-white text-slate-700 px-4 py-2 rounded-xl text-xs font-black border border-slate-200 hover:bg-slate-50 transition flex items-center gap-2">
-                                            <Icon name="Download" size={14} /> Export CSV
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-1 gap-4">
+                                    <h2 className="text-xl font-black">Session History</h2>
+                                    <div className="flex flex-wrap gap-2">
+                                        <input type="file" ref={fileInputRef} onChange={handleImport} accept=".csv" className="hidden" />
+                                        <button onClick={() => fileInputRef.current.click()} className="bg-white border border-indigo-100 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 shadow-sm text-indigo-600 hover:bg-indigo-50 transition">
+                                            <Icon name="Upload" size={14} /> Import
                                         </button>
-                                        <button onClick={clearAllRecords} className="bg-rose-50 text-rose-600 px-4 py-2 rounded-xl text-xs font-black border border-rose-100 hover:bg-rose-100 transition">Clear Data</button>
+                                        <button onClick={exportHistory} className="bg-white border px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 shadow-sm hover:bg-slate-50 transition">
+                                            <Icon name="Download" size={14} /> Export
+                                        </button>
+                                        <button onClick={clearAllData} className="bg-rose-50 border border-rose-100 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 shadow-sm text-rose-600 hover:bg-rose-100 transition">
+                                            <Icon name="Trash2" size={14} /> Clear All
+                                        </button>
                                     </div>
                                 </div>
-                                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                                <div className="bg-white rounded-3xl border overflow-hidden">
                                     <div className="overflow-x-auto custom-scrollbar">
                                         <table className="w-full">
-                                            <thead className="bg-slate-50 border-b border-slate-100">
+                                            <thead className="bg-slate-50 border-b">
                                                 <tr>
                                                     <SortHeader label="Machine" sortKey="machineName" />
+                                                    <SortHeader label="Location" sortKey="machineLocation" />
                                                     <SortHeader label="Day" sortKey="day" />
                                                     <SortHeader label="Date" sortKey="timestamp" />
                                                     <SortHeader label="Time" sortKey="timeOnlyValue" />
-                                                    <SortHeader label="Total Bet" sortKey="totalBet" />
+                                                    <SortHeader label="Bet" sortKey="totalBet" />
                                                     <SortHeader label="Denom" sortKey="denom" />
                                                     <SortHeader label="Multi" sortKey="multiplier" />
                                                     <SortHeader label="Jackpot" sortKey="jackpot" />
-                                                    <th className="px-6 py-5"></th>
+                                                    <th className="px-4 py-5"></th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50">
                                                 {sortedRecords.map(r => (
-                                                    <tr key={r.id} className="hover:bg-slate-50 transition text-sm">
+                                                    <tr key={r.id} className="hover:bg-slate-50/50 transition text-sm">
                                                         <td className="px-4 py-4 font-black text-slate-800 whitespace-nowrap">{r.machineName}</td>
+                                                        <td className="px-4 py-4 font-bold text-slate-400 whitespace-nowrap italic"><div className="flex items-center gap-1"><Icon name="MapPin" size={10}/> {r.machineLocation}</div></td>
                                                         <td className="px-4 py-4 font-bold text-slate-500">{r.day}</td>
                                                         <td className="px-4 py-4 font-bold text-slate-500 whitespace-nowrap">{r.displayDate}</td>
                                                         <td className="px-4 py-4 font-bold text-slate-800 whitespace-nowrap">{r.displayTime}</td>
@@ -518,9 +531,7 @@
                                                     </tr>
                                                 ))}
                                                 {records.length === 0 && (
-                                                    <tr>
-                                                        <td colSpan="9" className="px-4 py-12 text-center text-slate-400 font-bold">No sessions logged yet.</td>
-                                                    </tr>
+                                                    <tr><td colSpan="10" className="py-12 text-center text-slate-300 font-black italic">NO SESSIONS RECORDED</td></tr>
                                                 )}
                                             </tbody>
                                         </table>
